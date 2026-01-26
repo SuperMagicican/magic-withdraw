@@ -1,0 +1,8 @@
+com.magic.withdraw.core.loader.MagicLoader
+com.magic.withdraw.core.service.impl.WithdrawServiceImpl
+com.magic.withdraw.core.callback.CallBackServiceImpl
+com.magic.withdraw.core.callback.CallbackController
+com.magic.withdraw.core.key.impl.DefaultKeyManager
+com.magic.withdraw.core.service.impl.InMemoryProcessingOrderServiceImpl
+com.magic.withdraw.core.service.impl.HandleProcessingOrderServiceImpl
+com.magic.withdraw.core.domain.bean.CallbackConfig
