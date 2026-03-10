@@ -3,7 +3,6 @@ package com.magic.withdraw.core.service.impl;
 import com.magic.withdraw.core.domain.bean.ProcessingOrder;
 import com.magic.withdraw.core.service.ProcessingOrderService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.stereotype.Component;
 
 import java.util.Collection;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -12,7 +11,6 @@ import java.util.concurrent.CopyOnWriteArraySet;
  * @author lgy
  * @since 2026/1/22
  */
-@Component
 @ConditionalOnMissingBean(ProcessingOrderService.class)
 public class InMemoryProcessingOrderServiceImpl implements ProcessingOrderService {
 
