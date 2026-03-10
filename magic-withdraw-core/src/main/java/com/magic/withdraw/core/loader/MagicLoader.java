@@ -7,10 +7,14 @@ import com.magic.withdraw.core.service.ValidService;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
+import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
 
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * @author lgy
@@ -46,11 +50,17 @@ public class MagicLoader implements ApplicationContextAware {
      * @return 结果
      */
     public static TradeService getTradeService(String platform){
-        TradeService tradeService = magicTradeMap.get(platform);
-        if(tradeService != null){
-            return tradeService;
-        }else{
+        if (!StringUtils.hasLength(platform)) {
+            throw new TradeException("交易平台platform不能为空");
+        }
+        Set<TradeService> tradeServices = magicTradeMap.entrySet().stream().filter(
+                item -> platform.contains(item.getKey()))
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toSet());
+        if (CollectionUtils.isEmpty(tradeServices) || tradeServices.size() > 1) {
             throw new TradeException("未找到适配的交易类型,交易平台id:" + platform);
+        } else {
+            return tradeServices.iterator().next();
         }
     }
 
@@ -60,11 +70,17 @@ public class MagicLoader implements ApplicationContextAware {
      * @return 结果
      */
     public static ValidService getValidService(String platform){
-        ValidService validService = magicValidMap.get(platform);
-        if(validService != null){
-            return validService;
-        }else{
+        if (!StringUtils.hasLength(platform)) {
+            throw new TradeException("交易平台platform不能为空");
+        }
+        Set<ValidService> validServices = magicValidMap.entrySet().stream().filter(
+                        item -> platform.contains(item.getKey()))
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toSet());
+        if (CollectionUtils.isEmpty(validServices) || validServices.size() > 1) {
             throw new TradeException("未找到适配的交易类型,交易平台id:" + platform);
+        } else {
+            return validServices.iterator().next();
         }
     }
 }

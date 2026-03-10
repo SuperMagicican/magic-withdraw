@@ -51,7 +51,7 @@ public class ReapalWithdrawTrade implements TradeService {
         try {
             TradePlatformConfig tradePlatformConfig = TradePlatformConfigContext.get();
             if (tradePlatformConfig instanceof com.magic.withdraw.reapal.ReapalConfig config) {
-                reapalClientBulider(config);
+                reapalClientBuilder(config);
                 DfSingleTradeRequest dfSingleTradeRequest = new DfSingleTradeRequest();
                 dfSingleTradeRequest.setMerchantId(config.getMerchantId());
                 dfSingleTradeRequest.setCustomerId(config.getCustomerId());
@@ -100,7 +100,7 @@ public class ReapalWithdrawTrade implements TradeService {
         try {
             TradePlatformConfig tradePlatformConfig = TradePlatformConfigContext.get();
             if (tradePlatformConfig instanceof com.magic.withdraw.reapal.ReapalConfig config) {
-                reapalClientBulider(config);
+                reapalClientBuilder(config);
                 MemberMerchantAccountBalanceRequest balanceRequest =
                         new MemberMerchantAccountBalanceRequest();
                 balanceRequest.setCustomerId(config.getCustomerId());
@@ -138,7 +138,7 @@ public class ReapalWithdrawTrade implements TradeService {
         return "";
     }
 
-    private void reapalClientBulider(com.magic.withdraw.reapal.ReapalConfig config) {
+    private void reapalClientBuilder(com.magic.withdraw.reapal.ReapalConfig config) {
         ReapalConfig reapalConfig = new ReapalConfig();
         reapalConfig.setServerUrl(config.getOpenApiDomain());
         reapalConfig.setMerchantId(config.getMerchantId());
