@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.magic</groupId>
         <artifactId>magic-withdraw</artifactId>
-        <version>1.0.0</version>
+        <version>1.0.1</version>
     </parent>
 
     <artifactId>magic-withdraw-reapal</artifactId>
@@ -21,7 +21,7 @@
         <dependency>
             <groupId>com.magic</groupId>
             <artifactId>magic-withdraw-core</artifactId>
-            <version>1.0.0</version>
+            <version>${magic-withdraw.version}</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
