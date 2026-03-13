@@ -1,6 +1,7 @@
 package com.magic.withdraw.core.service.impl;
 
 import com.magic.withdraw.core.callback.CallBackService;
+import com.magic.withdraw.core.constants.OrderStatusConstant;
 import com.magic.withdraw.core.domain.bean.CallbackConfig;
 import com.magic.withdraw.core.domain.bean.ProcessingOrder;
 import com.magic.withdraw.core.domain.bean.WithdrawResult;
@@ -52,13 +53,13 @@ public class HandleProcessingOrderServiceImpl {
                                 processingOrder.getOrderNo(),
                                 processingOrder.getPlatform());
 
-                        if (Objects.equals("SUCCESS", response.getOrderStatus())) {
+                        if (Objects.equals(OrderStatusConstant.SUCCESS, response.getOrderStatus())) {
                             callBackService.successWithdraw(
                                     new WithdrawResult().setQueryBody(response.getResponseBody())
                                             .setOrderNo(processingOrder.getOrderNo()));
                             processingOrderService.remove(processingOrder);
-                        } else if (Objects.equals("FAIL", response.getOrderStatus()) ||
-                                    Objects.equals("REFUND", response.getOrderStatus())) {
+                        } else if (Objects.equals(OrderStatusConstant.FAIL, response.getOrderStatus()) ||
+                                    Objects.equals(OrderStatusConstant.REFUND, response.getOrderStatus())) {
                             callBackService.failWithdraw(
                                     new WithdrawResult().setQueryBody(response.getResponseBody())
                                             .setOrderNo(processingOrder.getOrderNo())

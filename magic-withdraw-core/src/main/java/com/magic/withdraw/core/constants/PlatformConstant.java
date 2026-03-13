@@ -13,4 +13,7 @@ public class PlatformConstant {
     /** 支付宝 */
     public final static String ALIPAY = "alipay";
 
+    /** 微信 */
+    public final static String WXPAY = "wxpay";
+
 }

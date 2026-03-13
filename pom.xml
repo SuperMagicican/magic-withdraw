@@ -13,6 +13,8 @@
         <module>magic-withdraw-alipay</module>
         <module>magic-withdraw-all</module>
         <module>magic-withdraw-reapal</module>
+        <module>magic-withdraw-demo</module>
+        <module>magic-withdraw-wxpay</module>
     </modules>
 
     <properties>

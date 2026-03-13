@@ -9,7 +9,7 @@ import java.io.Serializable;
  * @since 2026/1/13
  */
 @Data
-public class QueryBalaceResponse implements Serializable {
+public class QueryBalanceResponse implements Serializable {
 
     /** 是否成功 */
     private boolean success;

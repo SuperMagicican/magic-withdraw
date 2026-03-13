@@ -18,9 +18,9 @@ import com.magic.withdraw.core.annotation.TradePlatform;
 import com.magic.withdraw.core.constants.PlatformConstant;
 import com.magic.withdraw.core.context.TradePlatformConfigContext;
 import com.magic.withdraw.core.domain.bean.TradePlatformConfig;
-import com.magic.withdraw.core.domain.request.QueryBalaceRequest;
+import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
-import com.magic.withdraw.core.domain.response.QueryBalaceResponse;
+import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
 import com.magic.withdraw.core.service.TradeService;
@@ -80,7 +80,7 @@ public class AlipayWithdrawTrade implements TradeService {
             if (alipayClient == null) {
                 TradePlatformConfig tradePlatformConfig = TradePlatformConfigContext.get();
                 if (tradePlatformConfig instanceof AlipayConfig config) {
-                    alipayClientBulider(config);
+                    alipayClientBuilder(config);
                 } else {
                     log.error("阿里支付配置异常");
                     response.setSuccess(false);
@@ -106,8 +106,8 @@ public class AlipayWithdrawTrade implements TradeService {
     }
 
     @Override
-    public QueryBalaceResponse queryBalance(QueryBalaceRequest request) {
-        QueryBalaceResponse response = new QueryBalaceResponse();
+    public QueryBalanceResponse queryBalance(QueryBalanceRequest request) {
+        QueryBalanceResponse response = new QueryBalanceResponse();
         AlipayFundAccountQueryRequest alipayFundAccountQueryRequest = new AlipayFundAccountQueryRequest();
         AlipayFundAccountQueryModel model = new AlipayFundAccountQueryModel();
 
@@ -161,7 +161,7 @@ public class AlipayWithdrawTrade implements TradeService {
             if (alipayClient == null) {
                 TradePlatformConfig tradePlatformConfig = TradePlatformConfigContext.get();
                 if (tradePlatformConfig instanceof AlipayConfig config) {
-                    alipayClientBulider(config);
+                    alipayClientBuilder(config);
                 } else {
                     log.error("阿里支付配置异常");
                     response.setSuccess(false);
@@ -194,7 +194,7 @@ public class AlipayWithdrawTrade implements TradeService {
             if (alipayClient == null) {
                 TradePlatformConfig tradePlatformConfig = TradePlatformConfigContext.get();
                 if (tradePlatformConfig instanceof AlipayConfig config) {
-                    alipayClientBulider(config);
+                    alipayClientBuilder(config);
                 } else {
                     return "";
                 }
@@ -208,7 +208,7 @@ public class AlipayWithdrawTrade implements TradeService {
         }
     }
 
-    private void alipayClientBulider(AlipayConfig config) throws AlipayApiException{
+    private void alipayClientBuilder(AlipayConfig config) throws AlipayApiException{
         CertAlipayRequest certAlipayRequest = new CertAlipayRequest();
         certAlipayRequest.setServerUrl(SERVERURL);
         certAlipayRequest.setAppId(config.getAppId());

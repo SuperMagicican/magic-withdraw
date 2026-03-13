@@ -16,13 +16,15 @@ import java.math.BigDecimal;
 @Accessors(chain = true)
 public class SingleWithdrawRequest implements Serializable {
 
+    /** 登录凭证 */
+    private String code;
     private String orderNo;
     private String cardNo;
     private String cardName;
     private Integer accountType;
     /** 开户行行号 */
     private String bankNo;
-    /** 金额 (单位:分) */
+    /** 金额 (单位:元) */
     private BigDecimal amount;
     private String notifyUrl;
     /** 转账标题 */

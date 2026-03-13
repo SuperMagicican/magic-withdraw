@@ -1,8 +1,8 @@
 package com.magic.withdraw.core.service;
 
-import com.magic.withdraw.core.domain.request.QueryBalaceRequest;
+import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
-import com.magic.withdraw.core.domain.response.QueryBalaceResponse;
+import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
 
@@ -21,7 +21,7 @@ public interface TradeService {
     /**
      * 查询余额
      */
-    QueryBalaceResponse queryBalance(QueryBalaceRequest request);
+    QueryBalanceResponse queryBalance(QueryBalanceRequest request);
 
     /**
      * 查询订单

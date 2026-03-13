@@ -2,9 +2,9 @@ package com.magic.withdraw.core.service.impl;
 
 import com.magic.withdraw.core.domain.bean.CallbackConfig;
 import com.magic.withdraw.core.domain.bean.ProcessingOrder;
-import com.magic.withdraw.core.domain.request.QueryBalaceRequest;
+import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
-import com.magic.withdraw.core.domain.response.QueryBalaceResponse;
+import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
 import com.magic.withdraw.core.loader.MagicLoader;
@@ -49,7 +49,7 @@ public class WithdrawServiceImpl implements WithdrawService {
      * 查询余额
      */
     @Override
-    public QueryBalaceResponse queryBalance(QueryBalaceRequest request, String platform) {
+    public QueryBalanceResponse queryBalance(QueryBalanceRequest request, String platform) {
         return getPlatFormService(platform).queryBalance(request);
     }
 

@@ -23,10 +23,13 @@ public class SingleWithdrawResponse implements Serializable {
     /** 外部订单号 */
     private String outOrderNo;
 
+    /** 确认收款参数字段 （目前是微信独有）*/
+    private String packageInfo;
+
     private String requestBody;
 
     private String responseBody;
 
-    /** 耗时ms */
+    /** 耗时 ms */
     private Integer cost;
 }

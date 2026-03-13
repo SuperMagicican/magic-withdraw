@@ -11,7 +11,7 @@ import java.io.Serializable;
  */
 @Data
 @Accessors(chain = true)
-public class QueryBalaceRequest implements Serializable {
+public class QueryBalanceRequest implements Serializable {
 
     /** 登录凭证 */
     private String code;

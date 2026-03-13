@@ -5,9 +5,9 @@ import com.magic.withdraw.core.annotation.TradePlatform;
 import com.magic.withdraw.core.constants.PlatformConstant;
 import com.magic.withdraw.core.context.TradePlatformConfigContext;
 import com.magic.withdraw.core.domain.bean.TradePlatformConfig;
-import com.magic.withdraw.core.domain.request.QueryBalaceRequest;
+import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
-import com.magic.withdraw.core.domain.response.QueryBalaceResponse;
+import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
 import com.magic.withdraw.core.service.TradeService;
@@ -95,8 +95,8 @@ public class ReapalWithdrawTrade implements TradeService {
     }
 
     @Override
-    public QueryBalaceResponse queryBalance(QueryBalaceRequest request) {
-        QueryBalaceResponse response = new QueryBalaceResponse();
+    public QueryBalanceResponse queryBalance(QueryBalanceRequest request) {
+        QueryBalanceResponse response = new QueryBalanceResponse();
         try {
             TradePlatformConfig tradePlatformConfig = TradePlatformConfigContext.get();
             if (tradePlatformConfig instanceof com.magic.withdraw.reapal.ReapalConfig config) {
