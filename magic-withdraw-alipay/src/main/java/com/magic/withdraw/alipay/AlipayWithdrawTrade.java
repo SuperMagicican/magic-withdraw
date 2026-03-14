@@ -16,13 +16,13 @@ import com.alipay.api.response.AlipayFundTransUniTransferResponse;
 import com.alipay.api.response.AlipaySystemOauthTokenResponse;
 import com.magic.withdraw.core.annotation.TradePlatform;
 import com.magic.withdraw.core.constants.PlatformConstant;
-import com.magic.withdraw.core.context.TradePlatformConfigContext;
 import com.magic.withdraw.core.domain.bean.TradePlatformConfig;
 import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
 import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
+import com.magic.withdraw.core.service.PlatformConfigService;
 import com.magic.withdraw.core.service.TradeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,6 +52,7 @@ public class AlipayWithdrawTrade implements TradeService {
     private final static String IDENTITY_TYPE = "ALIPAY_LOGON_ID";
     private final static String GRANTTYPE = "authorization_code";
 
+    private final PlatformConfigService platformConfigService;
 
     private DefaultAlipayClient alipayClient;
 
@@ -78,7 +79,7 @@ public class AlipayWithdrawTrade implements TradeService {
 
         try {
             if (alipayClient == null) {
-                TradePlatformConfig tradePlatformConfig = TradePlatformConfigContext.get();
+                TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.ALIPAY);
                 if (tradePlatformConfig instanceof AlipayConfig config) {
                     alipayClientBuilder(config);
                 } else {
@@ -115,7 +116,7 @@ public class AlipayWithdrawTrade implements TradeService {
             // uid参数未来计划废弃，存量商户可继续使用，新商户请使用openid。请根据应用-开发配置-openid配置选择支持的字段。
             String openid = getOpenid(request.getCode());
             if (!StringUtils.hasLength(openid)) {
-                TradePlatformConfig tradePlatformConfig = TradePlatformConfigContext.get();
+                TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.ALIPAY);
                 if (tradePlatformConfig instanceof AlipayConfig config) {
                     model.setAlipayUserId(config.getUserId());
                 } else {
@@ -159,7 +160,7 @@ public class AlipayWithdrawTrade implements TradeService {
 
         try {
             if (alipayClient == null) {
-                TradePlatformConfig tradePlatformConfig = TradePlatformConfigContext.get();
+                TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.ALIPAY);
                 if (tradePlatformConfig instanceof AlipayConfig config) {
                     alipayClientBuilder(config);
                 } else {
@@ -192,7 +193,7 @@ public class AlipayWithdrawTrade implements TradeService {
         request.setGrantType(GRANTTYPE);
         try {
             if (alipayClient == null) {
-                TradePlatformConfig tradePlatformConfig = TradePlatformConfigContext.get();
+                TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.ALIPAY);
                 if (tradePlatformConfig instanceof AlipayConfig config) {
                     alipayClientBuilder(config);
                 } else {

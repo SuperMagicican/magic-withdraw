@@ -3,13 +3,13 @@ package com.magic.withdraw.reapal;
 import com.alibaba.fastjson2.JSON;
 import com.magic.withdraw.core.annotation.TradePlatform;
 import com.magic.withdraw.core.constants.PlatformConstant;
-import com.magic.withdraw.core.context.TradePlatformConfigContext;
 import com.magic.withdraw.core.domain.bean.TradePlatformConfig;
 import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
 import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
+import com.magic.withdraw.core.service.PlatformConfigService;
 import com.magic.withdraw.core.service.TradeService;
 import com.reapal.api.Client;
 import com.reapal.api.DefaultClient;
@@ -43,13 +43,14 @@ public class ReapalWithdrawTrade implements TradeService {
     private final static String ACCOUNT_TYPE_CORPORATE = "01";
     private final static String ACCOUNT_TYPE_PERSONAL = "02";
 
+    private final PlatformConfigService platformConfigService;
     private Client client;
 
     @Override
     public SingleWithdrawResponse singleWithdraw(SingleWithdrawRequest request) {
         SingleWithdrawResponse response = new SingleWithdrawResponse();
         try {
-            TradePlatformConfig tradePlatformConfig = TradePlatformConfigContext.get();
+            TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.REAPAL);
             if (tradePlatformConfig instanceof com.magic.withdraw.reapal.ReapalConfig config) {
                 reapalClientBuilder(config);
                 DfSingleTradeRequest dfSingleTradeRequest = new DfSingleTradeRequest();
@@ -98,7 +99,7 @@ public class ReapalWithdrawTrade implements TradeService {
     public QueryBalanceResponse queryBalance(QueryBalanceRequest request) {
         QueryBalanceResponse response = new QueryBalanceResponse();
         try {
-            TradePlatformConfig tradePlatformConfig = TradePlatformConfigContext.get();
+            TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.REAPAL);
             if (tradePlatformConfig instanceof com.magic.withdraw.reapal.ReapalConfig config) {
                 reapalClientBuilder(config);
                 MemberMerchantAccountBalanceRequest balanceRequest =

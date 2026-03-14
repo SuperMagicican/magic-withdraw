@@ -35,13 +35,13 @@ public class WxpayConfig extends TradePlatformConfig {
     public WxpayConfig() {
     }
 
-    public WxpayConfig(String appSecret, String appid, String mchid, String certificateSerialNo, String privateKeyFileName, String wechatPayPublicKeyId, String wechatPayPublicKeyFileName) {
+    public WxpayConfig(String appSecret, String appid, String mchid, String certificateSerialNo, String privateKeyFilePath, String wechatPayPublicKeyId, String wechatPayPublicKeyFilePath) {
         this.appSecret = appSecret;
         this.appid = appid;
         this.mchid = mchid;
         this.certificateSerialNo = certificateSerialNo;
-        this.privateKey = WXPayUtility.loadPrivateKeyFromPath(privateKeyFileName);
+        this.privateKey = WXPayUtility.loadPrivateKeyFromPath(privateKeyFilePath);
         this.wechatPayPublicKeyId = wechatPayPublicKeyId;
-        this.wechatPayPublicKey = WXPayUtility.loadPublicKeyFromPath(wechatPayPublicKeyFileName);
+        this.wechatPayPublicKey = WXPayUtility.loadPublicKeyFromPath(wechatPayPublicKeyFilePath);
     }
 }
