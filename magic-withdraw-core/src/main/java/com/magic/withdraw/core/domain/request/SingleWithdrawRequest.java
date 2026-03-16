@@ -18,6 +18,7 @@ public class SingleWithdrawRequest implements Serializable {
 
     /** 登录凭证 */
     private String code;
+    private String openid;
     private String orderNo;
     private String cardNo;
     private String cardName;

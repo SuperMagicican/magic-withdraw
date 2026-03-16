@@ -64,7 +64,10 @@ public class WxpayWithdrawTrade implements TradeService {
                 transferToUserRequest.appid = wxpayConfig.getAppid();
                 transferToUserRequest.outBillNo = request.getOrderNo();
                 transferToUserRequest.transferSceneId = wxpayConfig.getTransferSceneId();
-                transferToUserRequest.openid = this.getOpenid(request.getCode());
+                if (!StringUtils.hasLength(request.getOpenid())) {
+                    request.setOpenid(this.getOpenid(request.getCode()));
+                }
+                transferToUserRequest.openid = request.getOpenid();
                 transferToUserRequest.userName = WXPayUtility.encrypt(wxpayConfig.getWechatPayPublicKey(), request.getCardName());
                 transferToUserRequest.transferAmount = convertBigDecimalToFenLong(request.getAmount());
                 transferToUserRequest.transferRemark = request.getOrderTitle();
