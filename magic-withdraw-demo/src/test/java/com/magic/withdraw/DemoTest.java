@@ -19,6 +19,7 @@ public class DemoTest {
     public void test(){
 //        demoService.queryBalance();
 //        demoService.singleWithdraw();
-        demoService.queryTradingOrderNo();
+//        demoService.queryTradingOrderNo();
+        demoService.cancelWithdraw();
     }
 }

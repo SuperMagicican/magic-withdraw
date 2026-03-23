@@ -4,8 +4,10 @@ import com.alibaba.fastjson2.JSON;
 import com.magic.withdraw.core.annotation.TradePlatform;
 import com.magic.withdraw.core.constants.PlatformConstant;
 import com.magic.withdraw.core.domain.bean.TradePlatformConfig;
+import com.magic.withdraw.core.domain.request.CancelRequest;
 import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
+import com.magic.withdraw.core.domain.response.CancelResponse;
 import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
@@ -131,6 +133,11 @@ public class ReapalWithdrawTrade implements TradeService {
 
     @Override
     public QueryResponse queryTradingOrderNo(String orderNo) {
+        return null;
+    }
+
+    @Override
+    public CancelResponse cancelWithdraw(CancelRequest request) {
         return null;
     }
 

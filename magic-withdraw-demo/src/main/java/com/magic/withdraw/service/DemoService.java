@@ -1,12 +1,16 @@
 package com.magic.withdraw.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.magic.withdraw.core.constants.PlatformConstant;
 import com.magic.withdraw.core.context.TradePlatformConfigContext;
+import com.magic.withdraw.core.domain.request.CancelRequest;
 import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
+import com.magic.withdraw.core.domain.response.CancelResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
 import com.magic.withdraw.core.key.KeyManager;
+import com.magic.withdraw.core.service.PlatformConfigService;
 import com.magic.withdraw.core.service.WithdrawService;
 import com.magic.withdraw.core.utils.FileUtil;
 import com.magic.withdraw.reapal.ReapalConfig;
@@ -28,6 +32,7 @@ public class DemoService {
 
     private final WithdrawService withdrawService;
     private final KeyManager keyManager;
+    private final PlatformConfigService platformConfigService;
 
     public void queryBalance() {
         ReapalConfig reapalConfig = new ReapalConfig();
@@ -59,7 +64,7 @@ public class DemoService {
         );
         TradePlatformConfigContext.set(wxpayConfig);
         SingleWithdrawRequest singleWithdrawRequest = new SingleWithdrawRequest();
-        singleWithdrawRequest.setCode("0a1o62Ga1rL7lL0jRvFa177Z041o62GD");
+        singleWithdrawRequest.setOpenid("o99tk13ZiBUSFfw3dhlSLM1ck5vQ");
         singleWithdrawRequest.setAmount(new BigDecimal("1"));
         singleWithdrawRequest.setOrderNo("202603131039");
         singleWithdrawRequest.setCardName("肖伟");
@@ -83,6 +88,21 @@ public class DemoService {
         TradePlatformConfigContext.set(wxpayConfig);
         QueryResponse response = withdrawService.queryTradingOrderNo("202603131039", "wxpay");
         log.info("查询微信单笔转账响应：{}", JSON.toJSONString(response));
+    }
+
+    public void cancelWithdraw() {
+        WxpayConfig wxpayConfig = new WxpayConfig(
+                "21352098791e4379e555bd6acd3b3d4c",
+                "wxab761348763b6b33",
+                "1651221292",
+                "77A21F4B976F29434F6FD5FE811B1559C1CAD885",
+                keyManager.getCertPath("apiclient_key.pem"),
+                "PUB_KEY_ID_0116512212922026031200182085001400",
+                keyManager.getCertPath("pub_key.pem")
+        );
+        platformConfigService.set(PlatformConstant.WXPAY, wxpayConfig);
+        CancelResponse response = withdrawService.cancelWithdraw(new CancelRequest().setOrderNo("WR1232065311457411072"), "wxpay");
+        log.info("查询微信撤销单笔转账响应：{}", JSON.toJSONString(response));
     }
 
 

@@ -6,7 +6,7 @@
 
     <groupId>com.magic</groupId>
     <artifactId>magic-withdraw</artifactId>
-    <version>1.0.3</version>
+    <version>1.0.4</version>
     <packaging>pom</packaging>
     <modules>
         <module>magic-withdraw-core</module>
@@ -21,7 +21,7 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <magic-withdraw.version>1.0.3</magic-withdraw.version>
+        <magic-withdraw.version>1.0.4</magic-withdraw.version>
     </properties>
 
     <parent>

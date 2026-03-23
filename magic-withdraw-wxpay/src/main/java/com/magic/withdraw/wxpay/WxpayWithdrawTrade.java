@@ -5,18 +5,18 @@ import com.magic.withdraw.core.annotation.TradePlatform;
 import com.magic.withdraw.core.constants.OrderStatusConstant;
 import com.magic.withdraw.core.constants.PlatformConstant;
 import com.magic.withdraw.core.domain.bean.TradePlatformConfig;
+import com.magic.withdraw.core.domain.request.CancelRequest;
 import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
+import com.magic.withdraw.core.domain.response.CancelResponse;
 import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
 import com.magic.withdraw.core.service.PlatformConfigService;
 import com.magic.withdraw.core.service.TradeService;
 import com.magic.withdraw.wxpay.enums.TransferBillStatus;
-import com.magic.withdraw.wxpay.request.GetTransferBillByOutNoRequest;
-import com.magic.withdraw.wxpay.request.TransferSceneReportInfo;
-import com.magic.withdraw.wxpay.request.TransferToUserRequest;
-import com.magic.withdraw.wxpay.request.WxpayRequestModel;
+import com.magic.withdraw.wxpay.request.*;
+import com.magic.withdraw.wxpay.response.CancelTransferResponse;
 import com.magic.withdraw.wxpay.response.TransferBillEntity;
 import com.magic.withdraw.wxpay.response.TransferToUserResponse;
 import lombok.RequiredArgsConstructor;
@@ -171,6 +171,37 @@ public class WxpayWithdrawTrade implements TradeService {
     }
 
     @Override
+    public CancelResponse cancelWithdraw(CancelRequest request) {
+        CancelResponse response = new CancelResponse();
+        try {
+            TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.WXPAY);
+            if (tradePlatformConfig instanceof WxpayConfig wxpayConfig) {
+                try {
+                    WxpayRequestModel<CancelTransferRequest, CancelTransferResponse> wxpayRequestModel = new WxpayRequestModel<>();
+                    wxpayRequestModel.setUri(CANCEL_TRANSFER_PATH.replace("{out_bill_no}", WXPayUtility.urlEncode(request.getOrderNo())));
+                    wxpayRequestModel.setWxpayConfig(wxpayConfig);
+                    wxpayRequestModel.setHost(HOST);
+                    wxpayRequestModel.setClazz(CancelTransferResponse.class);
+                    wxpayRequestModel.setMethod(POST);
+                    CancelTransferResponse cancelTransferResponse = this.run(wxpayRequestModel);
+                    log.info("微信支付撤销单笔转账响应结果， {}", cancelTransferResponse);
+                    response.setSuccess(true);
+                } catch (Exception e) {
+                    log.error("微信支付撤销单笔转账异常:", e);
+                    response.setSuccess(false);
+                }
+            } else {
+                log.error("微信支付撤销单笔转账配置异常");
+                response.setSuccess(false);
+            }
+        } catch (Exception e) {
+            log.error("获取微信支付配置异常", e);
+            response.setSuccess(false);
+        }
+        return response;
+    }
+
+    @Override
     public String getOpenid(String code) {
         try {
             TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.WXPAY);
@@ -227,6 +258,10 @@ public class WxpayWithdrawTrade implements TradeService {
         if (StringUtils.hasLength(body)) {
             reqBuilder.addHeader("Content-Type", "application/json");
             requestBody = RequestBody.create(MediaType.parse("application/json; charset=utf-8"), body);
+        }
+        if (Objects.isNull(requestBody) && Objects.equals(wxpayRequestModel.getMethod(), POST)) {
+            reqBuilder.addHeader("Content-Type", "application/json");
+            requestBody = RequestBody.create(null, "");
         }
         reqBuilder.method(wxpayRequestModel.getMethod(), requestBody);
         Request httpRequest = reqBuilder.build();

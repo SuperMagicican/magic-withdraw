@@ -2,8 +2,10 @@ package com.magic.withdraw.core.service.impl;
 
 import com.magic.withdraw.core.domain.bean.CallbackConfig;
 import com.magic.withdraw.core.domain.bean.ProcessingOrder;
+import com.magic.withdraw.core.domain.request.CancelRequest;
 import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
+import com.magic.withdraw.core.domain.response.CancelResponse;
 import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
@@ -59,6 +61,14 @@ public class WithdrawServiceImpl implements WithdrawService {
     @Override
     public QueryResponse queryTradingOrderNo(String orderNo, String platform) {
         return getPlatFormService(platform).queryTradingOrderNo(orderNo);
+    }
+
+    /**
+     * 撤销提现
+     */
+    @Override
+    public CancelResponse cancelWithdraw(CancelRequest request, String platform) {
+        return getPlatFormService(platform).cancelWithdraw(request);
     }
 
     /**

@@ -15,4 +15,6 @@ public class WxpayConstant {
     public final static String TRANSFER_TO_USER_PATH = "/v3/fund-app/mch-transfer/transfer-bills";
 
     public final static String GET_TRANSFER_BILL_BY_OUT_NO_PATH = "/v3/fund-app/mch-transfer/transfer-bills/out-bill-no/{out_bill_no}";
+
+    public final static String CANCEL_TRANSFER_PATH = "/v3/fund-app/mch-transfer/transfer-bills/out-bill-no/{out_bill_no}/cancel";
 }
