@@ -16,6 +16,10 @@ import com.magic.withdraw.core.service.WithdrawService;
 import com.magic.withdraw.core.utils.FileUtil;
 import com.magic.withdraw.reapal.ReapalConfig;
 import com.magic.withdraw.wxpay.WxpayConfig;
+import com.reapal.api.Client;
+import com.reapal.api.DefaultClient;
+import com.reapal.api.request.FastCardQueryRequest;
+import com.reapal.api.response.FastCardQueryResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -126,7 +130,19 @@ public class DemoService {
         log.info("融宝代付查询响应：{}", JSON.toJSONString(response));
     }
 
-    private void setReapalConfig() {
+    public void reapalQueryCardBin() throws Exception {
+        ReapalConfig config = buildReapalConfig();
+        Client reapalClient = buildReapalClient(config);
+
+        FastCardQueryRequest request = new FastCardQueryRequest();
+        request.setMerchantId(config.getMerchantId());
+        request.setCardNo("6212260200133751211");
+
+        FastCardQueryResponse response = reapalClient.execute(request);
+        log.info("reapal card bin query response: {}", JSON.toJSONString(response));
+    }
+
+    private ReapalConfig buildReapalConfig() {
         ReapalConfig reapalConfig = new ReapalConfig();
         reapalConfig.setOpenApiDomain("https://testopenapi.reapal.com:8443");
         reapalConfig.setMerchantId("100000001600411");
@@ -136,6 +152,24 @@ public class DemoService {
         reapalConfig.setPrivateKeyPwd("123321");
         reapalConfig.setEncryptId("46A0936B22F446936E018ED93A0A49A6D9D8A75F");
         reapalConfig.setSignId("2f742193b1e5c862bdf1c8f115bae3802bef3249");
-        platformConfigService.set(PlatformConstant.REAPAL, reapalConfig);
+        return reapalConfig;
+    }
+
+    private void setReapalConfig() {
+        platformConfigService.set(PlatformConstant.REAPAL, buildReapalConfig());
+    }
+
+    private Client buildReapalClient(ReapalConfig config) {
+        com.reapal.api.ReapalConfig reapalConfig = new com.reapal.api.ReapalConfig();
+        reapalConfig.setServerUrl(config.getOpenApiDomain());
+        reapalConfig.setMerchantId(config.getMerchantId());
+        reapalConfig.setSignType(config.getSignType());
+        reapalConfig.setSignId(config.getSignId());
+        reapalConfig.setReapalPublicCertPath(config.getReapalPublicKey());
+        reapalConfig.setMerchantprivateCertPath(config.getPrivateKey());
+        reapalConfig.setMerchantprivateCertPwd(config.getPrivateKeyPwd());
+        reapalConfig.setEncryptId(config.getEncryptId());
+        reapalConfig.setEncryptType(config.getEncryptType());
+        return new DefaultClient(reapalConfig);
     }
 }

@@ -16,12 +16,13 @@ public class DemoTest {
     private DemoService demoService;
 
     @Test
-    public void test(){
+    public void test() throws Exception {
 //        demoService.queryBalance();
 //        demoService.singleWithdraw();
 //        demoService.queryTradingOrderNo();
 //        demoService.cancelWithdraw();
 //        demoService.reapalSingleWithdraw();
-        demoService.reapalQueryTradingOrderNo();
+//        demoService.reapalQueryTradingOrderNo();
+        demoService.reapalQueryCardBin();
     }
 }

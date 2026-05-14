@@ -21,13 +21,16 @@ import com.reapal.api.model.DfTradeSubResult;
 import com.reapal.api.model.DfSingleTradeResult;
 import com.reapal.api.request.DfTradeQueryRequest;
 import com.reapal.api.request.DfSingleTradeRequest;
+import com.reapal.api.request.FastCardQueryRequest;
 import com.reapal.api.request.MemberMerchantAccountBalanceRequest;
 import com.reapal.api.response.DfTradeQueryResponse;
 import com.reapal.api.response.DfSingleTradeResponse;
+import com.reapal.api.response.FastCardQueryResponse;
 import com.reapal.api.response.MemberMerchantAccountBalanceResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -66,6 +69,27 @@ public class ReapalWithdrawTrade implements TradeService {
             TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.REAPAL);
             if (tradePlatformConfig instanceof com.magic.withdraw.reapal.ReapalConfig config) {
                 reapalClientBuilder(config);
+                if (!StringUtils.hasText(request.getBankNo())) {
+                    if (!StringUtils.hasText(request.getCardNo())) {
+                        response.setSuccess(false);
+                        response.setMessage("银行卡号不能为空，无法查询银行编号");
+                        return response;
+                    }
+                    FastCardQueryResponse cardQueryResponse = queryCardBin(config, request.getCardNo());
+                    response.setResponseBody(JSON.toJSONString(cardQueryResponse));
+                    if (Objects.isNull(cardQueryResponse)
+                            || !REAPAL_SUCCESS_CODE.equals(cardQueryResponse.getCode())
+                            || Objects.isNull(cardQueryResponse.getData())
+                            || !StringUtils.hasText(cardQueryResponse.getData().getBankNo())) {
+                        response.setSuccess(false);
+                        response.setMessage(Objects.nonNull(cardQueryResponse) && Objects.nonNull(cardQueryResponse.getMsg())
+                                ? cardQueryResponse.getMsg()
+                                : "融宝卡BIN查询未返回银行编号");
+                        return response;
+                    }
+                    request.setBankNo(cardQueryResponse.getData().getBankNo());
+                }
+
                 DfSingleTradeRequest dfSingleTradeRequest = new DfSingleTradeRequest();
                 dfSingleTradeRequest.setMerchantId(config.getMerchantId());
                 dfSingleTradeRequest.setCustomerId(config.getCustomerId());
@@ -83,6 +107,7 @@ public class ReapalWithdrawTrade implements TradeService {
 
                 response.setRequestBody(JSON.toJSONString(dfSingleTradeRequest));
                 DfSingleTradeResponse dfSingleTradeResponse = client.execute(dfSingleTradeRequest);
+                response.setResponseBody(JSON.toJSONString(dfSingleTradeResponse));
 
                 log.info("融宝单笔代付响应结果：{}", dfSingleTradeResponse);
 
@@ -94,7 +119,6 @@ public class ReapalWithdrawTrade implements TradeService {
                     response.setOrderNo(dfSingleTradeResult.getMerchantOrderNo());
                     response.setOutOrderNo(dfSingleTradeResult.getOrderId());
                     response.setMessage(dfSingleTradeResult.getResultMsg());
-                    response.setResponseBody(JSON.toJSONString(dfSingleTradeResponse));
                 } else {
                     response.setSuccess(false);
                     response.setMessage(dfSingleTradeResponse.getMsg());
@@ -108,6 +132,15 @@ public class ReapalWithdrawTrade implements TradeService {
             response.setSuccess(false);
         }
         return response;
+    }
+
+    private FastCardQueryResponse queryCardBin(com.magic.withdraw.reapal.ReapalConfig config, String cardNo) throws Exception {
+        FastCardQueryRequest cardQueryRequest = new FastCardQueryRequest();
+        cardQueryRequest.setMerchantId(config.getMerchantId());
+        cardQueryRequest.setCardNo(cardNo);
+        FastCardQueryResponse cardQueryResponse = client.execute(cardQueryRequest);
+        log.info("融宝卡BIN查询响应结果：{}", cardQueryResponse);
+        return cardQueryResponse;
     }
 
     @Override
