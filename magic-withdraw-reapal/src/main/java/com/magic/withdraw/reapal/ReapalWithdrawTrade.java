@@ -2,6 +2,7 @@ package com.magic.withdraw.reapal;
 
 import com.alibaba.fastjson2.JSON;
 import com.magic.withdraw.core.annotation.TradePlatform;
+import com.magic.withdraw.core.constants.OrderStatusConstant;
 import com.magic.withdraw.core.constants.PlatformConstant;
 import com.magic.withdraw.core.domain.bean.TradePlatformConfig;
 import com.magic.withdraw.core.domain.request.CancelRequest;
@@ -16,9 +17,12 @@ import com.magic.withdraw.core.service.TradeService;
 import com.reapal.api.Client;
 import com.reapal.api.DefaultClient;
 import com.reapal.api.ReapalConfig;
+import com.reapal.api.model.DfTradeSubResult;
 import com.reapal.api.model.DfSingleTradeResult;
+import com.reapal.api.request.DfTradeQueryRequest;
 import com.reapal.api.request.DfSingleTradeRequest;
 import com.reapal.api.request.MemberMerchantAccountBalanceRequest;
+import com.reapal.api.response.DfTradeQueryResponse;
 import com.reapal.api.response.DfSingleTradeResponse;
 import com.reapal.api.response.MemberMerchantAccountBalanceResponse;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +31,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -41,9 +46,15 @@ import java.util.Objects;
 public class ReapalWithdrawTrade implements TradeService {
 
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
-    private final static String PAY_SIGHT_OTHER = "其他";
+    private final static String PAY_SIGHT_OTHER = "51";
     private final static String ACCOUNT_TYPE_CORPORATE = "01";
     private final static String ACCOUNT_TYPE_PERSONAL = "02";
+    private final static String REAPAL_SUCCESS_CODE = "0000";
+    private final static String REAPAL_STATUS_REJECTED = "4";
+    private final static String REAPAL_STATUS_PROCESSING = "5";
+    private final static String REAPAL_STATUS_SUCCESS = "6";
+    private final static String REAPAL_STATUS_FAIL = "7";
+    private final static String REAPAL_STATUS_SERVICE_REJECTED = "10";
 
     private final PlatformConfigService platformConfigService;
     private Client client;
@@ -75,7 +86,9 @@ public class ReapalWithdrawTrade implements TradeService {
 
                 log.info("融宝单笔代付响应结果：{}", dfSingleTradeResponse);
 
-                if ("0000".equals(dfSingleTradeResponse.getCode()) && "0000".equals(dfSingleTradeResponse.getData().getResultCode())) {
+                if (REAPAL_SUCCESS_CODE.equals(dfSingleTradeResponse.getCode())
+                        && Objects.nonNull(dfSingleTradeResponse.getData())
+                        && REAPAL_SUCCESS_CODE.equals(dfSingleTradeResponse.getData().getResultCode())) {
                     DfSingleTradeResult dfSingleTradeResult = dfSingleTradeResponse.getData();
                     response.setSuccess(true);
                     response.setOrderNo(dfSingleTradeResult.getMerchantOrderNo());
@@ -112,7 +125,7 @@ public class ReapalWithdrawTrade implements TradeService {
 
                 log.info("融宝查询余额响应结果：{}", balanceResponse);
 
-                if ("0000".equals(balanceResponse.getCode())) {
+                if (REAPAL_SUCCESS_CODE.equals(balanceResponse.getCode())) {
                     response.setSuccess(true);
                     response.setAvailableBalance(balanceResponse.getData().getPaymentBalance());
                     response.setMessage(balanceResponse.getMsg());
@@ -133,7 +146,57 @@ public class ReapalWithdrawTrade implements TradeService {
 
     @Override
     public QueryResponse queryTradingOrderNo(String orderNo) {
-        return null;
+        QueryResponse response = new QueryResponse();
+        try {
+            TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.REAPAL);
+            if (tradePlatformConfig instanceof com.magic.withdraw.reapal.ReapalConfig config) {
+                reapalClientBuilder(config);
+                DfTradeQueryRequest queryRequest = new DfTradeQueryRequest();
+                queryRequest.setMerchantId(config.getMerchantId());
+                queryRequest.setCustomerId(config.getCustomerId());
+                queryRequest.setMerchantOrderNo(orderNo);
+
+                DfTradeQueryResponse queryResponse = client.execute(queryRequest);
+                log.info("融宝代付查询响应结果：{}", queryResponse);
+                response.setResponseBody(JSON.toJSONString(queryResponse));
+
+                if (!REAPAL_SUCCESS_CODE.equals(queryResponse.getCode())) {
+                    response.setSuccess(false);
+                    response.setMessage(queryResponse.getMsg());
+                    return response;
+                }
+                if (Objects.isNull(queryResponse.getData())) {
+                    response.setSuccess(false);
+                    response.setMessage("融宝代付查询响应数据为空");
+                    return response;
+                }
+                if (!REAPAL_SUCCESS_CODE.equals(queryResponse.getData().getResultCode())) {
+                    response.setSuccess(false);
+                    response.setMessage(queryResponse.getData().getResultMsg());
+                    return response;
+                }
+
+                DfTradeSubResult detail = findTradeDetail(queryResponse.getData().getDetails(), orderNo);
+                if (Objects.isNull(detail)) {
+                    response.setSuccess(false);
+                    response.setMessage("融宝代付查询响应明细为空");
+                    return response;
+                }
+
+                response.setSuccess(true);
+                response.setOrderStatus(convertReapalStatus(detail.getStatus()));
+                response.setFailReason(detail.getResultMsg());
+                response.setMessage(detail.getResultMsg());
+            } else {
+                response.setSuccess(false);
+                response.setMessage("reapal config is null");
+            }
+        } catch (Exception e) {
+            log.error("融宝代付查询异常：", e);
+            response.setSuccess(false);
+            response.setMessage(e.getMessage());
+        }
+        return response;
     }
 
     @Override
@@ -148,7 +211,7 @@ public class ReapalWithdrawTrade implements TradeService {
 
     private void reapalClientBuilder(com.magic.withdraw.reapal.ReapalConfig config) {
         ReapalConfig reapalConfig = new ReapalConfig();
-        reapalConfig.setServerUrl(config.getOpenApiDomain());
+        reapalConfig.setServerUrl(normalizeOpenApiDomain(config.getOpenApiDomain()));
         reapalConfig.setMerchantId(config.getMerchantId());
         reapalConfig.setSignType(config.getSignType());
         reapalConfig.setSignId(config.getSignId());
@@ -158,6 +221,43 @@ public class ReapalWithdrawTrade implements TradeService {
         reapalConfig.setEncryptId(config.getEncryptId());
         reapalConfig.setEncryptType(config.getEncryptType());
         client = new DefaultClient(reapalConfig);
+    }
+
+    private static DfTradeSubResult findTradeDetail(List<DfTradeSubResult> details, String orderNo) {
+        if (Objects.isNull(details) || details.isEmpty()) {
+            return null;
+        }
+        return details.stream()
+                .filter(detail -> Objects.equals(orderNo, detail.getMerchantOrderNo()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static String convertReapalStatus(String status) {
+        if (REAPAL_STATUS_SUCCESS.equals(status)) {
+            return OrderStatusConstant.SUCCESS;
+        }
+        if (REAPAL_STATUS_FAIL.equals(status)
+                || REAPAL_STATUS_REJECTED.equals(status)
+                || REAPAL_STATUS_SERVICE_REJECTED.equals(status)) {
+            return OrderStatusConstant.FAIL;
+        }
+        if (REAPAL_STATUS_PROCESSING.equals(status)) {
+            return OrderStatusConstant.PROCESSING;
+        }
+        return OrderStatusConstant.PROCESSING;
+    }
+
+    private static String normalizeOpenApiDomain(String openApiDomain) {
+        if (Objects.isNull(openApiDomain)) {
+            return null;
+        }
+        return openApiDomain
+                .replace("/dforder/df/singleTrade", "")
+                .replace("/dforder/df/batchTrade", "")
+                .replace("/dforder/df/query", "")
+                .replace("/member/merchant/account/balance", "")
+                .replaceAll("/+$", "");
     }
 
     private static Long convertBigDecimalToFenLong(BigDecimal amount) {

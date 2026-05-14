@@ -7,6 +7,7 @@ import com.magic.withdraw.core.domain.request.CancelRequest;
 import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
 import com.magic.withdraw.core.domain.response.CancelResponse;
+import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
 import com.magic.withdraw.core.key.KeyManager;
@@ -37,7 +38,7 @@ public class DemoService {
     public void queryBalance() {
         ReapalConfig reapalConfig = new ReapalConfig();
 
-        reapalConfig.setOpenApiDomain("https://testopenapi.reapal.com:8443/member/merchant/account/balance");
+        reapalConfig.setOpenApiDomain("https://testopenapi.reapal.com:8443");
         reapalConfig.setMerchantId("100000001600411");
         reapalConfig.setCustomerId("100000001600411");
         reapalConfig.setSignId("2f742193b1e5c862bdf1c8f115bae3802bef3249");
@@ -46,10 +47,10 @@ public class DemoService {
         reapalConfig.setEncryptId("46A0936B22F446936E018ED93A0A49A6D9D8A75F");
         reapalConfig.setReapalPublicKey(FileUtil.copyResourceToTempFile("test.sm2.cer"));
 
-
-        TradePlatformConfigContext.set(reapalConfig);
+        platformConfigService.set(PlatformConstant.REAPAL, reapalConfig);
         QueryBalanceRequest request = new QueryBalanceRequest();
-        withdrawService.queryBalance(request, "测试_reapal");
+        QueryBalanceResponse response = withdrawService.queryBalance(request, "测试_reapal");
+        log.info("查询余额响应：{}", JSON.toJSONString(response));
     }
 
     public void singleWithdraw() {
@@ -106,4 +107,35 @@ public class DemoService {
     }
 
 
+    public void reapalSingleWithdraw() {
+        setReapalConfig();
+        SingleWithdrawRequest singleWithdrawRequest = new SingleWithdrawRequest();
+        singleWithdrawRequest.setAmount(new BigDecimal("1"));
+        singleWithdrawRequest.setOrderNo("20260514111");
+        singleWithdrawRequest.setCardNo("6212260200133751211");
+        singleWithdrawRequest.setCardName("王月");
+        singleWithdrawRequest.setBankNo("0102");
+        singleWithdrawRequest.setAccountType(SingleWithdrawRequest.EnumAccountType.PERSONAL.getCode());
+        SingleWithdrawResponse singleWithdrawResponse = withdrawService.singleWithdraw(singleWithdrawRequest, "测试_reapal");
+        log.info("融宝单笔代付响应：{}", JSON.toJSONString(singleWithdrawResponse));
+    }
+
+    public void reapalQueryTradingOrderNo() {
+        setReapalConfig();
+        QueryResponse response = withdrawService.queryTradingOrderNo("20260514111", "测试_reapal");
+        log.info("融宝代付查询响应：{}", JSON.toJSONString(response));
+    }
+
+    private void setReapalConfig() {
+        ReapalConfig reapalConfig = new ReapalConfig();
+        reapalConfig.setOpenApiDomain("https://testopenapi.reapal.com:8443");
+        reapalConfig.setMerchantId("100000001600411");
+        reapalConfig.setCustomerId("100000001600411");
+        reapalConfig.setReapalPublicKey(FileUtil.copyResourceToTempFile("test.sm2.cer"));
+        reapalConfig.setPrivateKey(FileUtil.copyResourceToTempFile("2f742193b1e5c862bdf1c8f115bae3802bef3249_itrus.sm2.pfx"));
+        reapalConfig.setPrivateKeyPwd("123321");
+        reapalConfig.setEncryptId("46A0936B22F446936E018ED93A0A49A6D9D8A75F");
+        reapalConfig.setSignId("2f742193b1e5c862bdf1c8f115bae3802bef3249");
+        platformConfigService.set(PlatformConstant.REAPAL, reapalConfig);
+    }
 }

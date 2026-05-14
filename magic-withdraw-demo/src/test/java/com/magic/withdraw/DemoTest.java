@@ -20,6 +20,8 @@ public class DemoTest {
 //        demoService.queryBalance();
 //        demoService.singleWithdraw();
 //        demoService.queryTradingOrderNo();
-        demoService.cancelWithdraw();
+//        demoService.cancelWithdraw();
+//        demoService.reapalSingleWithdraw();
+        demoService.reapalQueryTradingOrderNo();
     }
 }
