@@ -1,12 +1,9 @@
 package com.magic.withdraw.reapal;
 
 import com.magic.withdraw.core.domain.bean.TradePlatformConfig;
-import com.magic.withdraw.core.key.KeyManager;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.Accessors;
-import org.springframework.stereotype.Component;
 
 import java.io.Serializable;
 
@@ -17,8 +14,6 @@ import java.io.Serializable;
 @Getter
 @Setter
 @Accessors(chain = true)
-@Component
-@RequiredArgsConstructor
 public class ReapalConfig
         extends TradePlatformConfig implements Serializable {
 
@@ -32,14 +27,4 @@ public class ReapalConfig
     private String encryptType = "SM4";
     private String encryptId;
     private String reapalPublicKey;
-
-    private final KeyManager keyManager;
-
-    public String getPrivateKey() {
-        return keyManager.getCertPath(privateKey);
-    }
-
-    public String getReapalPublicKey() {
-        return keyManager.getCertPath(reapalPublicKey);
-    }
 }
