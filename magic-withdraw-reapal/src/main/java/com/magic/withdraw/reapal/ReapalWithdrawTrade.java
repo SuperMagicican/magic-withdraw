@@ -109,7 +109,7 @@ public class ReapalWithdrawTrade implements TradeService {
                 DfSingleTradeResponse dfSingleTradeResponse = client.execute(dfSingleTradeRequest);
                 response.setResponseBody(JSON.toJSONString(dfSingleTradeResponse));
 
-                log.info("融宝单笔代付响应结果：{}", dfSingleTradeResponse);
+                log.info("融宝单笔代付响应结果：{}", JSON.toJSONString(dfSingleTradeResponse));
 
                 if (REAPAL_SUCCESS_CODE.equals(dfSingleTradeResponse.getCode())
                         && Objects.nonNull(dfSingleTradeResponse.getData())
@@ -130,6 +130,7 @@ public class ReapalWithdrawTrade implements TradeService {
         } catch (Exception e) {
             log.error("融宝单笔代付异常：", e);
             response.setSuccess(false);
+            response.setMessage(e.getMessage());
         }
         return response;
     }
@@ -156,7 +157,7 @@ public class ReapalWithdrawTrade implements TradeService {
                 balanceRequest.setMerchantId(config.getMerchantId());
                 MemberMerchantAccountBalanceResponse balanceResponse = client.execute(balanceRequest);
 
-                log.info("融宝查询余额响应结果：{}", balanceResponse);
+                log.info("融宝查询余额响应结果：{}", JSON.toJSONString(balanceResponse));
 
                 if (REAPAL_SUCCESS_CODE.equals(balanceResponse.getCode())) {
                     response.setSuccess(true);
@@ -173,6 +174,7 @@ public class ReapalWithdrawTrade implements TradeService {
         } catch (Exception e) {
             log.error("融宝查询余额异常：", e);
             response.setSuccess(false);
+            response.setMessage(e.getMessage());
         }
         return response;
     }
@@ -190,7 +192,7 @@ public class ReapalWithdrawTrade implements TradeService {
                 queryRequest.setMerchantOrderNo(orderNo);
 
                 DfTradeQueryResponse queryResponse = client.execute(queryRequest);
-                log.info("融宝代付查询响应结果：{}", queryResponse);
+                log.info("融宝代付查询响应结果：{}", JSON.toJSONString(queryResponse));
                 response.setResponseBody(JSON.toJSONString(queryResponse));
 
                 if (!REAPAL_SUCCESS_CODE.equals(queryResponse.getCode())) {
