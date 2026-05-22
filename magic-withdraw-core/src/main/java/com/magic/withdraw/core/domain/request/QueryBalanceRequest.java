@@ -15,4 +15,7 @@ public class QueryBalanceRequest implements Serializable {
 
     /** 登录凭证 */
     private String code;
+
+    /** 账户类型: BASIC, OPERATION, FEES （微信必传） */
+    private String accountType;
 }

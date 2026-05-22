@@ -20,5 +20,6 @@ public class QueryBalanceResponse implements Serializable {
     /** 可用余额 (单位:分) */
     private Long availableBalance;
 
-
+    /** 不可用余额 (单位：分) */
+    private Long pendingBalance;
 }

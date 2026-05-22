@@ -16,6 +16,7 @@ import com.magic.withdraw.core.service.PlatformConfigService;
 import com.magic.withdraw.core.service.TradeService;
 import com.magic.withdraw.wxpay.enums.TransferBillStatus;
 import com.magic.withdraw.wxpay.request.*;
+import com.magic.withdraw.wxpay.response.BalanceResponse;
 import com.magic.withdraw.wxpay.response.CancelTransferResponse;
 import com.magic.withdraw.wxpay.response.TransferBillEntity;
 import com.magic.withdraw.wxpay.response.TransferToUserResponse;
@@ -51,6 +52,7 @@ import static com.magic.withdraw.wxpay.WxpayConstant.*;
 public class WxpayWithdrawTrade implements TradeService {
 
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
+    private static final String DEFAULT_BALANCE_ACCOUNT_TYPE = "OPERATION";
     private final PlatformConfigService platformConfigService;
 
     @Override
@@ -120,7 +122,31 @@ public class WxpayWithdrawTrade implements TradeService {
 
     @Override
     public QueryBalanceResponse queryBalance(QueryBalanceRequest request) {
-        return null;
+        QueryBalanceResponse response = new QueryBalanceResponse();
+        try {
+            TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.WXPAY);
+            if (tradePlatformConfig instanceof WxpayConfig wxpayConfig) {
+                try {
+                    String accountType = getBalanceAccountType(request);
+                    BalanceResponse balanceResponse = queryBalanceByAccountType(wxpayConfig, accountType);
+                    response.setSuccess(true);
+                    response.setAvailableBalance(balanceResponse.getAvailableAmount());
+                    response.setPendingBalance(balanceResponse.getPendingAmount());
+                } catch (WXPayUtility.ApiException e) {
+                    log.error("微信查询余额api异常:", e);
+                    response.setSuccess(false);
+                    response.setMessage(e.getMessage());
+                }
+            } else {
+                log.error("微信查询余额配置异常");
+                response.setSuccess(false);
+            }
+        } catch (Exception e) {
+            log.error("微信查询余额异常", e);
+            response.setSuccess(false);
+            response.setMessage(e.getMessage());
+        }
+        return response;
     }
 
     @Override
@@ -290,5 +316,22 @@ public class WxpayWithdrawTrade implements TradeService {
             return 0L;
         }
         return amount.multiply(HUNDRED).setScale(0, RoundingMode.DOWN).longValue();
+    }
+
+    private BalanceResponse queryBalanceByAccountType(WxpayConfig wxpayConfig, String accountType) {
+        WxpayRequestModel<Void, BalanceResponse> wxpayRequestModel = new WxpayRequestModel<>();
+        wxpayRequestModel.setWxpayConfig(wxpayConfig);
+        wxpayRequestModel.setUri(QUERY_BALANCE_PATH.replace("{account_type}", WXPayUtility.urlEncode(accountType)));
+        wxpayRequestModel.setHost(HOST);
+        wxpayRequestModel.setClazz(BalanceResponse.class);
+        wxpayRequestModel.setMethod(GET);
+        return this.run(wxpayRequestModel);
+    }
+
+    private static String getBalanceAccountType(QueryBalanceRequest request) {
+        if (Objects.isNull(request) || !StringUtils.hasText(request.getAccountType())) {
+            return DEFAULT_BALANCE_ACCOUNT_TYPE;
+        }
+        return request.getAccountType().trim();
     }
 }
