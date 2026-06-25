@@ -2,14 +2,17 @@ package com.magic.withdraw.alipay;
 
 import com.alibaba.fastjson2.JSON;
 import com.alipay.api.*;
+import com.alipay.api.domain.AlipayDataDataserviceBillDownloadurlQueryModel;
 import com.alipay.api.domain.AlipayFundAccountQueryModel;
 import com.alipay.api.domain.AlipayFundTransCommonQueryModel;
 import com.alipay.api.domain.AlipayFundTransUniTransferModel;
 import com.alipay.api.domain.Participant;
+import com.alipay.api.request.AlipayDataDataserviceBillDownloadurlQueryRequest;
 import com.alipay.api.request.AlipayFundAccountQueryRequest;
 import com.alipay.api.request.AlipayFundTransCommonQueryRequest;
 import com.alipay.api.request.AlipayFundTransUniTransferRequest;
 import com.alipay.api.request.AlipaySystemOauthTokenRequest;
+import com.alipay.api.response.AlipayDataDataserviceBillDownloadurlQueryResponse;
 import com.alipay.api.response.AlipayFundAccountQueryResponse;
 import com.alipay.api.response.AlipayFundTransCommonQueryResponse;
 import com.alipay.api.response.AlipayFundTransUniTransferResponse;
@@ -19,9 +22,11 @@ import com.magic.withdraw.core.constants.PlatformConstant;
 import com.magic.withdraw.core.domain.bean.TradePlatformConfig;
 import com.magic.withdraw.core.domain.request.CancelRequest;
 import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
+import com.magic.withdraw.core.domain.request.QueryBillRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
 import com.magic.withdraw.core.domain.response.CancelResponse;
 import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
+import com.magic.withdraw.core.domain.response.QueryBillResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
 import com.magic.withdraw.core.service.PlatformConfigService;
@@ -184,6 +189,59 @@ public class AlipayWithdrawTrade implements TradeService {
         } catch (AlipayApiException e) {
             log.error("阿里支付查询订单异常:", e);
             response.setSuccess(false);
+        }
+        return response;
+    }
+
+    /**
+     * 查询支付宝账单下载地址
+     */
+    @Override
+    public QueryBillResponse queryBill(QueryBillRequest request) {
+        QueryBillResponse response = new QueryBillResponse();
+        if (Objects.isNull(request)) {
+            response.setSuccess(false);
+            response.setMessage("账单查询请求不能为空");
+            return response;
+        }
+
+        AlipayDataDataserviceBillDownloadurlQueryRequest alipayRequest =
+                new AlipayDataDataserviceBillDownloadurlQueryRequest();
+        AlipayDataDataserviceBillDownloadurlQueryModel model =
+                new AlipayDataDataserviceBillDownloadurlQueryModel();
+        model.setBillType(request.getBillType());
+        model.setBillDate(request.getBillDate());
+        model.setSmid(request.getSmid());
+        alipayRequest.setBizModel(model);
+        response.setRequestBody(JSON.toJSONString(model));
+
+        try {
+            if (alipayClient == null) {
+                TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.ALIPAY);
+                if (tradePlatformConfig instanceof AlipayConfig config) {
+                    alipayClientBuilder(config);
+                } else {
+                    log.error("支付宝配置异常");
+                    response.setSuccess(false);
+                    return response;
+                }
+            }
+            AlipayDataDataserviceBillDownloadurlQueryResponse alipayResponse =
+                    alipayClient.certificateExecute(alipayRequest);
+            response.setResponseBody(JSON.toJSONString(alipayResponse));
+            if (Objects.equals("10000", alipayResponse.getCode())) {
+                response.setSuccess(true);
+                response.setBillDownloadUrl(alipayResponse.getBillDownloadUrl());
+                response.setBillFileCode(alipayResponse.getBillFileCode());
+            } else {
+                response.setSuccess(false);
+                response.setMessage(StringUtils.hasLength(alipayResponse.getSubMsg())
+                        ? alipayResponse.getSubMsg() : alipayResponse.getMsg());
+            }
+        } catch (AlipayApiException e) {
+            log.error("支付宝查询账单异常:", e);
+            response.setSuccess(false);
+            response.setMessage(e.getMessage());
         }
         return response;
     }

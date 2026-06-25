@@ -2,9 +2,11 @@ package com.magic.withdraw.core.service;
 
 import com.magic.withdraw.core.domain.request.CancelRequest;
 import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
+import com.magic.withdraw.core.domain.request.QueryBillRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
 import com.magic.withdraw.core.domain.response.CancelResponse;
 import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
+import com.magic.withdraw.core.domain.response.QueryBillResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
 
@@ -28,6 +30,11 @@ public interface WithdrawService {
      * 查询订单
      */
     QueryResponse queryTradingOrderNo(String orderNo, String platform);
+
+    /**
+     * 查询账单
+     */
+    QueryBillResponse queryBill(QueryBillRequest request, String platform);
 
     /**
      * 撤销提现

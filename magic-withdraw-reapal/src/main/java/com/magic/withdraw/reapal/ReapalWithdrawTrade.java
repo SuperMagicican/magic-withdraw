@@ -7,9 +7,11 @@ import com.magic.withdraw.core.constants.PlatformConstant;
 import com.magic.withdraw.core.domain.bean.TradePlatformConfig;
 import com.magic.withdraw.core.domain.request.CancelRequest;
 import com.magic.withdraw.core.domain.request.QueryBalanceRequest;
+import com.magic.withdraw.core.domain.request.QueryBillRequest;
 import com.magic.withdraw.core.domain.request.SingleWithdrawRequest;
 import com.magic.withdraw.core.domain.response.CancelResponse;
 import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
+import com.magic.withdraw.core.domain.response.QueryBillResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
 import com.magic.withdraw.core.service.PlatformConfigService;
@@ -232,6 +234,14 @@ public class ReapalWithdrawTrade implements TradeService {
             response.setMessage(e.getMessage());
         }
         return response;
+    }
+
+    /**
+     * 查询账单，融宝暂未实现
+     */
+    @Override
+    public QueryBillResponse queryBill(QueryBillRequest request) {
+        return new QueryBillResponse();
     }
 
     @Override
