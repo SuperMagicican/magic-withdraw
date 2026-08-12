@@ -31,7 +31,23 @@
         <dependency>
             <groupId>com.reapal.sdk</groupId>
             <artifactId>reapal-sdk-java</artifactId>
-            <version>4.3.22</version>
+            <version>4.3.156</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.bouncycastle</groupId>
+                    <artifactId>bcprov-jdk15on</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.bouncycastle</groupId>
+                    <artifactId>bcpkix-jdk15on</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- 融宝 SDK 解析 SM2 PFX 证书时直接使用，不能只依赖 SDK 的传递依赖。 -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk15on</artifactId>
+            <version>1.70</version>
         </dependency>
     </dependencies>
 

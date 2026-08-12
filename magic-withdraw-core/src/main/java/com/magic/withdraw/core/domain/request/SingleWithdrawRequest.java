@@ -31,6 +31,9 @@ public class SingleWithdrawRequest implements Serializable {
     /** 转账标题 */
     private String orderTitle;
 
+    /** 融宝专用：充值商户订单号 */
+    private String rechargeOrderNo;
+
     @Getter
     @AllArgsConstructor
     public enum EnumAccountType {

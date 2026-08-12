@@ -27,4 +27,27 @@ public class ReapalConfig
     private String encryptType = "SM4";
     private String encryptId;
     private String reapalPublicKey;
+
+    /** 充值交互模式，默认企业网银直连 */
+    private RechargeMode rechargeMode = RechargeMode.CASHIER;
+
+    /** 企业网银直连时使用的充值银行编码 */
+    private String rechargeBankNo;
+
+    /** 充值外部会员号 */
+    private String memberId;
+
+    /** 充值用户IP */
+    private String memberIp;
+
+    /** 网银支付完成后的同步跳转地址 */
+    private String returnUrl;
+
+    /** 融宝充值成功或失败后的服务端异步通知地址。 */
+    private String rechargeNotifyUrl;
+
+    public enum RechargeMode {
+        B2B_DIRECT,
+        CASHIER
+    }
 }

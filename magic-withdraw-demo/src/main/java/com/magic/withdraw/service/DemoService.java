@@ -15,6 +15,8 @@ import com.magic.withdraw.core.service.PlatformConfigService;
 import com.magic.withdraw.core.service.WithdrawService;
 import com.magic.withdraw.core.utils.FileUtil;
 import com.magic.withdraw.reapal.ReapalConfig;
+import com.magic.withdraw.reapal.ReapalConfig.RechargeMode;
+import com.magic.withdraw.reapal.ReapalSingleWithdrawData;
 import com.magic.withdraw.wxpay.WxpayConfig;
 import com.reapal.api.Client;
 import com.reapal.api.DefaultClient;
@@ -111,17 +113,29 @@ public class DemoService {
     }
 
 
-    public void reapalSingleWithdraw() {
-        setReapalConfig();
+    public SingleWithdrawResponse reapalSingleWithdraw() {
+        return reapalSingleWithdraw(RechargeMode.B2B_DIRECT);
+    }
+
+    public SingleWithdrawResponse reapalSingleWithdraw(RechargeMode rechargeMode) {
+        setReapalConfig(rechargeMode);
+        String orderNo = "RP" + System.currentTimeMillis();
         SingleWithdrawRequest singleWithdrawRequest = new SingleWithdrawRequest();
         singleWithdrawRequest.setAmount(new BigDecimal("1"));
-        singleWithdrawRequest.setOrderNo("20260514111");
+        singleWithdrawRequest.setOrderNo(orderNo);
+        singleWithdrawRequest.setRechargeOrderNo(orderNo + "R");
         singleWithdrawRequest.setCardNo("6212260200133751211");
         singleWithdrawRequest.setCardName("王月");
         singleWithdrawRequest.setBankNo("0102");
+        singleWithdrawRequest.setOrderTitle("融宝订单代付充值");
         singleWithdrawRequest.setAccountType(SingleWithdrawRequest.EnumAccountType.PERSONAL.getCode());
         SingleWithdrawResponse singleWithdrawResponse = withdrawService.singleWithdraw(singleWithdrawRequest, "测试_reapal");
-        log.info("融宝单笔代付响应：{}", JSON.toJSONString(singleWithdrawResponse));
+        ReapalSingleWithdrawData platformData = ReapalSingleWithdrawData.from(singleWithdrawResponse);
+        log.info("融宝订单代付联调结果：stage={}, orderNo={}, outOrderNo={}, rechargeOrderNo={}, paymentUrl={}",
+                platformData.getSubmitStage(), singleWithdrawResponse.getOrderNo(),
+                singleWithdrawResponse.getOutOrderNo(), platformData.getRechargeOrderNo(),
+                platformData.getPaymentUrl());
+        return singleWithdrawResponse;
     }
 
     public void reapalQueryTradingOrderNo() {
@@ -143,6 +157,10 @@ public class DemoService {
     }
 
     private ReapalConfig buildReapalConfig() {
+        return buildReapalConfig(RechargeMode.B2B_DIRECT);
+    }
+
+    private ReapalConfig buildReapalConfig(RechargeMode rechargeMode) {
         ReapalConfig reapalConfig = new ReapalConfig();
         reapalConfig.setOpenApiDomain("https://testopenapi.reapal.com:8443");
         reapalConfig.setMerchantId("100000001600411");
@@ -152,11 +170,22 @@ public class DemoService {
         reapalConfig.setPrivateKeyPwd("123321");
         reapalConfig.setEncryptId("46A0936B22F446936E018ED93A0A49A6D9D8A75F");
         reapalConfig.setSignId("2f742193b1e5c862bdf1c8f115bae3802bef3249");
+        reapalConfig.setRechargeMode(rechargeMode);
+        reapalConfig.setRechargeBankNo("0102");
+        reapalConfig.setMemberId("100000001600411");
+        reapalConfig.setMemberIp("127.0.0.1");
+        reapalConfig.setReturnUrl("https://merchant.example/reapal/return");
+        reapalConfig.setRechargeNotifyUrl(
+                "https://merchant.example/withdrawCallBack/notify/reapal/recharge");
         return reapalConfig;
     }
 
     private void setReapalConfig() {
         platformConfigService.set(PlatformConstant.REAPAL, buildReapalConfig());
+    }
+
+    private void setReapalConfig(RechargeMode rechargeMode) {
+        platformConfigService.set(PlatformConstant.REAPAL, buildReapalConfig(rechargeMode));
     }
 
     private Client buildReapalClient(ReapalConfig config) {

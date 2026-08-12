@@ -84,6 +84,62 @@ WxpayConfig wxpayConfig = new WxpayConfig(
 platformConfigService.set(PlatformConstant.WXPAY, wxpayConfig);
 ```
 
+### 4. 融宝标准订单代付
+
+融宝单笔代付会先创建标准订单代付，再使用融宝返回的充值金额创建关联的网银 B2B 充值订单：
+
+```java
+reapalConfig.setRechargeMode(ReapalConfig.RechargeMode.B2B_DIRECT)
+        .setRechargeBankNo("0102")
+        .setMemberId("业务会员号")
+        .setMemberIp("用户IP")
+        .setRechargeNotifyUrl("https://merchant.example/withdrawCallBack/notify/reapal/recharge")
+        .setReturnUrl("https://merchant.example/reapal/return");
+
+SingleWithdrawRequest request = new SingleWithdrawRequest()
+        .setOrderNo("PAYOUT-20260811001")
+        .setRechargeOrderNo("RECHARGE-20260811001")
+        .setCardNo("收款银行卡号")
+        .setCardName("收款人姓名")
+        .setAccountType(SingleWithdrawRequest.EnumAccountType.PERSONAL.getCode())
+        .setBankNo("0102")
+        .setAmount(new BigDecimal("100.00"))
+        .setNotifyUrl("https://merchant.example/withdrawCallBack/notify/reapal")
+        .setOrderTitle("订单代付充值");
+
+SingleWithdrawResponse response = withdrawService.singleWithdraw(request, PlatformConstant.REAPAL);
+ReapalSingleWithdrawData reapalData = ReapalSingleWithdrawData.from(response);
+String paymentUrl = reapalData.getPaymentUrl();
+```
+
+`SingleWithdrawResponse` 只保留通用字段；融宝提交阶段、充值订单和付款 URL 等数据位于
+`platformData`。调用方通过 `ReapalSingleWithdrawData.from(response)` 转成融宝实体。
+该方法同时支持内存中的实体对象和 JSON 反序列化后得到的 `Map`。
+
+`response.success=true` 表示代付订单和关联充值订单均已受理，业务方应引导付款方访问
+`paymentUrl` 完成网银支付。银行卡最终到账结果仍以代付查询或代付回调为准。
+
+充值模式支持：
+
+- `B2B_DIRECT`：指定 `rechargeBankNo`，直接进入对应企业网银；这是默认模式。
+- `CASHIER`：进入融宝收银台后选择付款方式，不需要传 `rechargeBankNo`。
+
+`SingleWithdrawRequest` 中仅 `rechargeOrderNo` 是融宝专用的逐笔参数；充值模式、付款银行、会员信息和返回地址统一配置在 `ReapalConfig`。
+
+收银台模式只需调整融宝配置：
+
+```java
+reapalConfig.setRechargeMode(ReapalConfig.RechargeMode.CASHIER)
+        .setRechargeBankNo(null);
+```
+
+两种模式都返回 `paymentUrl`，均需要付款人手动完成充值；充值成功后融宝才会继续执行关联代付。
+
+融宝订单在充值状态为 `wait` 或 `processing` 时不会加入代付巡检。融宝向
+`rechargeNotifyUrl` 推送 `completed` 后，组件才将关联代付订单加入巡检；充值通知处理成功后返回
+`success`。默认使用内存保存充值订单与代付订单的关系，生产环境可提供
+`ReapalRechargeOrderStore` Bean 替换为持久化实现。
+
 ## 回调与巡检配置
 
 在业务工程中可配置：

@@ -1,6 +1,7 @@
 package com.magic.withdraw;
 
 import com.magic.withdraw.service.DemoService;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,6 +17,7 @@ public class DemoTest {
     private DemoService demoService;
 
     @Test
+    @Disabled("手工调用真实支付渠道的集成测试")
     public void test() throws Exception {
 //        demoService.queryBalance();
 //        demoService.singleWithdraw();

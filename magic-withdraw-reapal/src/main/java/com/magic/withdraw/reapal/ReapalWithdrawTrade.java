@@ -14,13 +14,14 @@ import com.magic.withdraw.core.domain.response.QueryBalanceResponse;
 import com.magic.withdraw.core.domain.response.QueryBillResponse;
 import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
+import com.magic.withdraw.reapal.ReapalSingleWithdrawData.SubmitStage;
 import com.magic.withdraw.core.service.PlatformConfigService;
 import com.magic.withdraw.core.service.TradeService;
+import com.magic.withdraw.reapal.recharge.ReapalRechargeService;
 import com.reapal.api.Client;
 import com.reapal.api.DefaultClient;
-import com.reapal.api.ReapalConfig;
-import com.reapal.api.model.DfTradeSubResult;
 import com.reapal.api.model.DfSingleTradeResult;
+import com.reapal.api.model.DfTradeSubResult;
 import com.reapal.api.request.DfTradeQueryRequest;
 import com.reapal.api.request.DfSingleTradeRequest;
 import com.reapal.api.request.FastCardQueryRequest;
@@ -31,118 +32,211 @@ import com.reapal.api.response.FastCardQueryResponse;
 import com.reapal.api.response.MemberMerchantAccountBalanceResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.List;
 import java.util.Objects;
 
 /**
- * 融宝 实现类
+ * 融宝实现类。
+ *
  * @author lgy
  * @since 2026/1/13
  */
 @Slf4j
-@Service
 @RequiredArgsConstructor
 @TradePlatform(PlatformConstant.REAPAL)
 public class ReapalWithdrawTrade implements TradeService {
 
-    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
-    private final static String PAY_SIGHT_OTHER = "51";
-    private final static String ACCOUNT_TYPE_CORPORATE = "01";
-    private final static String ACCOUNT_TYPE_PERSONAL = "02";
-    private final static String REAPAL_SUCCESS_CODE = "0000";
-    private final static String REAPAL_STATUS_REJECTED = "4";
-    private final static String REAPAL_STATUS_PROCESSING = "5";
-    private final static String REAPAL_STATUS_SUCCESS = "6";
-    private final static String REAPAL_STATUS_FAIL = "7";
-    private final static String REAPAL_STATUS_SERVICE_REJECTED = "10";
-
+    private static final String PAY_SIGHT_OTHER = "51";
+    private static final String ACCOUNT_TYPE_CORPORATE = "01";
+    private static final String ACCOUNT_TYPE_PERSONAL = "02";
+    private static final String REAPAL_SUCCESS_CODE = "0000";
+    private static final String PAYOUT_WAIT_RECHARGE_CODE = "2000";
+    private static final String PAYOUT_PRODUCT_CODE = "OR_PAY";
+    private static final String PAYOUT_BUSINESS_CODE = "PAYMENT";
+    private static final String STANDARD_PAYOUT_TRADE_TYPE = "1";
+    private static final String ONLINE_BANK_RECHARGE_TYPE = "O_PAY";
+    private static final String REAPAL_STATUS_REJECTED = "4";
+    private static final String REAPAL_STATUS_PROCESSING = "5";
+    private static final String REAPAL_STATUS_SUCCESS = "6";
+    private static final String REAPAL_STATUS_FAIL = "7";
+    private static final String REAPAL_STATUS_SERVICE_REJECTED = "10";
+    private static final String REAPAL_STATUS_WAIT_RECHARGE = "12";
     private final PlatformConfigService platformConfigService;
-    private Client client;
+    private final ReapalRechargeService rechargeService;
 
     @Override
     public SingleWithdrawResponse singleWithdraw(SingleWithdrawRequest request) {
         SingleWithdrawResponse response = new SingleWithdrawResponse();
-        try {
-            TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.REAPAL);
-            if (tradePlatformConfig instanceof com.magic.withdraw.reapal.ReapalConfig config) {
-                reapalClientBuilder(config);
-                if (!StringUtils.hasText(request.getBankNo())) {
-                    if (!StringUtils.hasText(request.getCardNo())) {
-                        response.setSuccess(false);
-                        response.setMessage("银行卡号不能为空，无法查询银行编号");
-                        return response;
-                    }
-                    FastCardQueryResponse cardQueryResponse = queryCardBin(config, request.getCardNo());
-                    response.setResponseBody(JSON.toJSONString(cardQueryResponse));
-                    if (Objects.isNull(cardQueryResponse)
-                            || !REAPAL_SUCCESS_CODE.equals(cardQueryResponse.getCode())
-                            || Objects.isNull(cardQueryResponse.getData())
-                            || !StringUtils.hasText(cardQueryResponse.getData().getBankNo())) {
-                        response.setSuccess(false);
-                        response.setMessage(Objects.nonNull(cardQueryResponse) && Objects.nonNull(cardQueryResponse.getMsg())
-                                ? cardQueryResponse.getMsg()
-                                : "融宝卡BIN查询未返回银行编号");
-                        return response;
-                    }
-                    request.setBankNo(cardQueryResponse.getData().getBankNo());
-                }
-
-                DfSingleTradeRequest dfSingleTradeRequest = new DfSingleTradeRequest();
-                dfSingleTradeRequest.setMerchantId(config.getMerchantId());
-                dfSingleTradeRequest.setCustomerId(config.getCustomerId());
-                dfSingleTradeRequest.setAmount(convertBigDecimalToFenLong(request.getAmount()));
-                dfSingleTradeRequest.setPaySight(PAY_SIGHT_OTHER);
-                dfSingleTradeRequest.setMerchantOrderNo(request.getOrderNo());
-                dfSingleTradeRequest.setAccountType(
-                        Objects.equals(SingleWithdrawRequest.EnumAccountType.COMPANY.getCode(),
-                                request.getAccountType()) ?
-                                ACCOUNT_TYPE_CORPORATE : ACCOUNT_TYPE_PERSONAL);
-                dfSingleTradeRequest.setBankNo(request.getBankNo());
-                dfSingleTradeRequest.setCardNo(request.getCardNo());
-                dfSingleTradeRequest.setCardName(request.getCardName());
-                dfSingleTradeRequest.setNotifyUrl(request.getNotifyUrl());
-
-                response.setRequestBody(JSON.toJSONString(dfSingleTradeRequest));
-                DfSingleTradeResponse dfSingleTradeResponse = client.execute(dfSingleTradeRequest);
-                response.setResponseBody(JSON.toJSONString(dfSingleTradeResponse));
-
-                log.info("融宝单笔代付响应结果：{}", JSON.toJSONString(dfSingleTradeResponse));
-
-                if (REAPAL_SUCCESS_CODE.equals(dfSingleTradeResponse.getCode())
-                        && Objects.nonNull(dfSingleTradeResponse.getData())
-                        && REAPAL_SUCCESS_CODE.equals(dfSingleTradeResponse.getData().getResultCode())) {
-                    DfSingleTradeResult dfSingleTradeResult = dfSingleTradeResponse.getData();
-                    response.setSuccess(true);
-                    response.setOrderNo(dfSingleTradeResult.getMerchantOrderNo());
-                    response.setOutOrderNo(dfSingleTradeResult.getOrderId());
-                    response.setMessage(dfSingleTradeResult.getResultMsg());
-                } else {
-                    response.setSuccess(false);
-                    response.setMessage(dfSingleTradeResponse.getMsg());
-                }
-            } else {
-                response.setSuccess(false);
-                response.setMessage("reapal config is null");
-            }
-        } catch (Exception e) {
-            log.error("融宝单笔代付异常：", e);
-            response.setSuccess(false);
-            response.setMessage(e.getMessage());
+        response.setPollingRequired(false);
+        ReapalSingleWithdrawData platformData = new ReapalSingleWithdrawData();
+        response.setPlatformData(platformData);
+        String validationMessage = validateRequest(request);
+        if (validationMessage != null) {
+            platformData.setSubmitStage(SubmitStage.VALIDATION_FAILED);
+            response.setMessage(validationMessage);
+            return response;
         }
-        return response;
+
+        platformData.setRechargeOrderNo(request.getRechargeOrderNo());
+        try {
+            ReapalConfig config = getConfig();
+            String configValidationMessage = rechargeService.validate(config);
+            if (configValidationMessage != null) {
+                platformData.setSubmitStage(SubmitStage.VALIDATION_FAILED);
+                response.setMessage(configValidationMessage);
+                return response;
+            }
+            Client client = buildClient(config);
+            String bankNo = resolvePayoutBankNo(client, config, request, response);
+            if (!StringUtils.hasText(bankNo)) {
+                platformData.setSubmitStage(SubmitStage.PAYOUT_REJECTED);
+                return response;
+            }
+
+            DfSingleTradeRequest payoutRequest = buildPayoutRequest(config, request, bankNo);
+            response.setRequestBody(JSON.toJSONString(payoutRequest));
+            DfSingleTradeResponse payoutResponse = client.execute(payoutRequest);
+            response.setResponseBody(JSON.toJSONString(payoutResponse));
+            log.info("融宝标准订单代付响应结果：{}", response.getResponseBody());
+
+            if (!isPayoutAccepted(payoutResponse)) {
+                platformData.setSubmitStage(SubmitStage.PAYOUT_REJECTED);
+                response.setMessage(resolvePayoutMessage(payoutResponse));
+                return response;
+            }
+
+            DfSingleTradeResult payoutResult = payoutResponse.getData();
+            populatePayoutResponse(response, platformData, payoutResult);
+            return rechargeService.submit(client, config, request, response, platformData, payoutResult);
+        } catch (Exception e) {
+            log.error("融宝订单代付提交异常", e);
+            response.setSuccess(false);
+            if (platformData.getSubmitStage() == SubmitStage.PAYOUT_ACCEPTED) {
+                platformData.setSubmitStage(SubmitStage.RECHARGE_UNKNOWN);
+            } else if (platformData.getSubmitStage() == null) {
+                platformData.setSubmitStage(SubmitStage.PAYOUT_REJECTED);
+            }
+            response.setMessage(e.getMessage());
+            return response;
+        }
     }
 
-    private FastCardQueryResponse queryCardBin(com.magic.withdraw.reapal.ReapalConfig config, String cardNo) throws Exception {
+    private static void populatePayoutResponse(SingleWithdrawResponse response,
+                                               ReapalSingleWithdrawData platformData,
+                                               DfSingleTradeResult result) {
+        response.setOrderNo(result.getMerchantOrderNo());
+        response.setOutOrderNo(result.getOrderId());
+        platformData.setRechargeAmount(result.getRechargeAmount());
+        platformData.setSubmitStage(SubmitStage.PAYOUT_ACCEPTED);
+        response.setMessage(result.getResultMsg());
+    }
+
+    private String resolvePayoutBankNo(Client client, ReapalConfig config,
+                                       SingleWithdrawRequest request,
+                                       SingleWithdrawResponse response) throws Exception {
+        if (StringUtils.hasText(request.getBankNo())) {
+            return request.getBankNo();
+        }
+        FastCardQueryResponse cardQueryResponse = queryCardBin(client, config, request.getCardNo());
+        if (cardQueryResponse == null || !REAPAL_SUCCESS_CODE.equals(cardQueryResponse.getCode())
+                || cardQueryResponse.getData() == null
+                || !StringUtils.hasText(cardQueryResponse.getData().getBankNo())) {
+            response.setSuccess(false);
+            response.setMessage(cardQueryResponse != null && StringUtils.hasText(cardQueryResponse.getMsg())
+                    ? cardQueryResponse.getMsg() : "融宝卡BIN查询未返回银行编号");
+            return null;
+        }
+        return cardQueryResponse.getData().getBankNo();
+    }
+
+    private static DfSingleTradeRequest buildPayoutRequest(ReapalConfig config,
+                                                            SingleWithdrawRequest request,
+                                                            String bankNo) {
+        DfSingleTradeRequest payoutRequest = new DfSingleTradeRequest();
+        payoutRequest.setMerchantId(config.getMerchantId());
+        payoutRequest.setCustomerId(config.getCustomerId());
+        payoutRequest.setAmount(convertBigDecimalToFenLong(request.getAmount()));
+        payoutRequest.setPaySight(PAY_SIGHT_OTHER);
+        payoutRequest.setMerchantOrderNo(request.getOrderNo());
+        payoutRequest.setAccountType(Objects.equals(SingleWithdrawRequest.EnumAccountType.COMPANY.getCode(),
+                request.getAccountType()) ? ACCOUNT_TYPE_CORPORATE : ACCOUNT_TYPE_PERSONAL);
+        payoutRequest.setBankNo(bankNo);
+        payoutRequest.setCardNo(request.getCardNo());
+        payoutRequest.setCardName(request.getCardName());
+        payoutRequest.setNotifyUrl(request.getNotifyUrl());
+        payoutRequest.setProductCode(PAYOUT_PRODUCT_CODE);
+        payoutRequest.setBusinessCode(PAYOUT_BUSINESS_CODE);
+        payoutRequest.setTradeType(STANDARD_PAYOUT_TRADE_TYPE);
+        payoutRequest.setRechargeType(ONLINE_BANK_RECHARGE_TYPE);
+        return payoutRequest;
+    }
+
+    private static boolean isPayoutAccepted(DfSingleTradeResponse payoutResponse) {
+        return payoutResponse != null
+                && REAPAL_SUCCESS_CODE.equals(payoutResponse.getCode())
+                && payoutResponse.getData() != null
+                && isPayoutBusinessAccepted(payoutResponse.getData().getResultCode())
+                && StringUtils.hasText(payoutResponse.getData().getOrderId())
+                && payoutResponse.getData().getRechargeAmount() != null
+                && payoutResponse.getData().getRechargeAmount() > 0;
+    }
+
+    private static boolean isPayoutBusinessAccepted(String resultCode) {
+        return REAPAL_SUCCESS_CODE.equals(resultCode) || PAYOUT_WAIT_RECHARGE_CODE.equals(resultCode);
+    }
+
+    private static String resolvePayoutMessage(DfSingleTradeResponse payoutResponse) {
+        if (payoutResponse == null) {
+            return "融宝代付响应为空";
+        }
+        if (payoutResponse.getData() != null && StringUtils.hasText(payoutResponse.getData().getResultMsg())) {
+            return payoutResponse.getData().getResultMsg();
+        }
+        return payoutResponse.getMsg();
+    }
+
+    private static String validateRequest(SingleWithdrawRequest request) {
+        if (request == null) {
+            return "提现请求不能为空";
+        }
+        if (!StringUtils.hasText(request.getOrderNo())) {
+            return "代付订单号不能为空";
+        }
+        if (!StringUtils.hasText(request.getRechargeOrderNo())) {
+            return "充值订单号不能为空";
+        }
+        if (Objects.equals(request.getOrderNo(), request.getRechargeOrderNo())) {
+            return "充值订单号不能与代付订单号相同";
+        }
+        if (request.getOrderNo().length() > 50 || request.getRechargeOrderNo().length() > 50) {
+            return "订单号长度不能超过50个字符";
+        }
+        if (!StringUtils.hasText(request.getCardNo()) || !StringUtils.hasText(request.getCardName())) {
+            return "收款银行卡号和开户姓名不能为空";
+        }
+        if (!Objects.equals(request.getAccountType(), SingleWithdrawRequest.EnumAccountType.COMPANY.getCode())
+                && !Objects.equals(request.getAccountType(), SingleWithdrawRequest.EnumAccountType.PERSONAL.getCode())) {
+            return "账户类型不正确";
+        }
+        if (!isValidAmount(request.getAmount())) {
+            return "金额必须大于0且最多保留两位小数";
+        }
+        return null;
+    }
+
+    private static boolean isValidAmount(BigDecimal amount) {
+        return amount != null && amount.signum() > 0 && amount.stripTrailingZeros().scale() <= 2;
+    }
+
+    private FastCardQueryResponse queryCardBin(Client client, ReapalConfig config, String cardNo) throws Exception {
         FastCardQueryRequest cardQueryRequest = new FastCardQueryRequest();
         cardQueryRequest.setMerchantId(config.getMerchantId());
         cardQueryRequest.setCardNo(cardNo);
         FastCardQueryResponse cardQueryResponse = client.execute(cardQueryRequest);
-        log.info("融宝卡BIN查询响应结果：{}", cardQueryResponse);
+        log.info("融宝卡BIN查询响应结果：{}", JSON.toJSONString(cardQueryResponse));
         return cardQueryResponse;
     }
 
@@ -150,31 +244,25 @@ public class ReapalWithdrawTrade implements TradeService {
     public QueryBalanceResponse queryBalance(QueryBalanceRequest request) {
         QueryBalanceResponse response = new QueryBalanceResponse();
         try {
-            TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.REAPAL);
-            if (tradePlatformConfig instanceof com.magic.withdraw.reapal.ReapalConfig config) {
-                reapalClientBuilder(config);
-                MemberMerchantAccountBalanceRequest balanceRequest =
-                        new MemberMerchantAccountBalanceRequest();
-                balanceRequest.setCustomerId(config.getCustomerId());
-                balanceRequest.setMerchantId(config.getMerchantId());
-                MemberMerchantAccountBalanceResponse balanceResponse = client.execute(balanceRequest);
+            ReapalConfig config = getConfig();
+            Client client = buildClient(config);
+            MemberMerchantAccountBalanceRequest balanceRequest = new MemberMerchantAccountBalanceRequest();
+            balanceRequest.setCustomerId(config.getCustomerId());
+            balanceRequest.setMerchantId(config.getMerchantId());
+            MemberMerchantAccountBalanceResponse balanceResponse = client.execute(balanceRequest);
+            log.info("融宝查询余额响应结果：{}", JSON.toJSONString(balanceResponse));
 
-                log.info("融宝查询余额响应结果：{}", JSON.toJSONString(balanceResponse));
-
-                if (REAPAL_SUCCESS_CODE.equals(balanceResponse.getCode())) {
-                    response.setSuccess(true);
-                    response.setAvailableBalance(balanceResponse.getData().getPaymentBalance());
-                    response.setMessage(balanceResponse.getMsg());
-                } else {
-                    response.setSuccess(false);
-                    response.setMessage(balanceResponse.getMsg());
-                }
+            if (balanceResponse != null && REAPAL_SUCCESS_CODE.equals(balanceResponse.getCode())
+                    && balanceResponse.getData() != null) {
+                response.setSuccess(true);
+                response.setAvailableBalance(balanceResponse.getData().getPaymentBalance());
+                response.setMessage(balanceResponse.getMsg());
             } else {
                 response.setSuccess(false);
-                response.setMessage("reapal config is null");
+                response.setMessage(balanceResponse == null ? "融宝余额响应为空" : balanceResponse.getMsg());
             }
         } catch (Exception e) {
-            log.error("融宝查询余额异常：", e);
+            log.error("融宝查询余额异常", e);
             response.setSuccess(false);
             response.setMessage(e.getMessage());
         }
@@ -185,59 +273,59 @@ public class ReapalWithdrawTrade implements TradeService {
     public QueryResponse queryTradingOrderNo(String orderNo) {
         QueryResponse response = new QueryResponse();
         try {
-            TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.REAPAL);
-            if (tradePlatformConfig instanceof com.magic.withdraw.reapal.ReapalConfig config) {
-                reapalClientBuilder(config);
-                DfTradeQueryRequest queryRequest = new DfTradeQueryRequest();
-                queryRequest.setMerchantId(config.getMerchantId());
-                queryRequest.setCustomerId(config.getCustomerId());
-                queryRequest.setMerchantOrderNo(orderNo);
+            ReapalConfig config = getConfig();
+            Client client = buildClient(config);
+            DfTradeQueryRequest queryRequest = new DfTradeQueryRequest();
+            queryRequest.setMerchantId(config.getMerchantId());
+            queryRequest.setCustomerId(config.getCustomerId());
+            queryRequest.setMerchantOrderNo(orderNo);
 
-                DfTradeQueryResponse queryResponse = client.execute(queryRequest);
-                log.info("融宝代付查询响应结果：{}", JSON.toJSONString(queryResponse));
-                response.setResponseBody(JSON.toJSONString(queryResponse));
-
-                if (!REAPAL_SUCCESS_CODE.equals(queryResponse.getCode())) {
-                    response.setSuccess(false);
-                    response.setMessage(queryResponse.getMsg());
-                    return response;
-                }
-                if (Objects.isNull(queryResponse.getData())) {
-                    response.setSuccess(false);
-                    response.setMessage("融宝代付查询响应数据为空");
-                    return response;
-                }
-                if (!REAPAL_SUCCESS_CODE.equals(queryResponse.getData().getResultCode())) {
-                    response.setSuccess(false);
-                    response.setMessage(queryResponse.getData().getResultMsg());
-                    return response;
-                }
-
-                DfTradeSubResult detail = findTradeDetail(queryResponse.getData().getDetails(), orderNo);
-                if (Objects.isNull(detail)) {
-                    response.setSuccess(false);
-                    response.setMessage("融宝代付查询响应明细为空");
-                    return response;
-                }
-
-                response.setSuccess(true);
-                response.setOrderStatus(convertReapalStatus(detail.getStatus()));
-                response.setFailReason(detail.getResultMsg());
-                response.setMessage(detail.getResultMsg());
-            } else {
+            DfTradeQueryResponse queryResponse = client.execute(queryRequest);
+            log.info("融宝代付查询响应结果：{}", JSON.toJSONString(queryResponse));
+            response.setResponseBody(JSON.toJSONString(queryResponse));
+            if (!isTradeQuerySuccessful(queryResponse)) {
                 response.setSuccess(false);
-                response.setMessage("reapal config is null");
+                response.setMessage(resolveTradeQueryMessage(queryResponse));
+                return response;
             }
+
+            DfTradeSubResult detail = findTradeDetail(queryResponse.getData().getDetails(), orderNo);
+            if (detail == null) {
+                response.setSuccess(false);
+                response.setMessage("融宝代付查询响应明细为空");
+                return response;
+            }
+            response.setSuccess(true);
+            response.setOrderStatus(convertReapalStatus(detail.getStatus()));
+            response.setFailReason(detail.getResultMsg());
+            response.setMessage(detail.getResultMsg());
         } catch (Exception e) {
-            log.error("融宝代付查询异常：", e);
+            log.error("融宝代付查询异常", e);
             response.setSuccess(false);
             response.setMessage(e.getMessage());
         }
         return response;
     }
 
+    private static boolean isTradeQuerySuccessful(DfTradeQueryResponse queryResponse) {
+        return queryResponse != null
+                && REAPAL_SUCCESS_CODE.equals(queryResponse.getCode())
+                && queryResponse.getData() != null
+                && REAPAL_SUCCESS_CODE.equals(queryResponse.getData().getResultCode());
+    }
+
+    private static String resolveTradeQueryMessage(DfTradeQueryResponse queryResponse) {
+        if (queryResponse == null) {
+            return "融宝代付查询响应为空";
+        }
+        if (queryResponse.getData() != null && StringUtils.hasText(queryResponse.getData().getResultMsg())) {
+            return queryResponse.getData().getResultMsg();
+        }
+        return queryResponse.getMsg();
+    }
+
     /**
-     * 查询账单，融宝暂未实现
+     * 查询账单，融宝暂未实现。
      */
     @Override
     public QueryBillResponse queryBill(QueryBillRequest request) {
@@ -254,8 +342,16 @@ public class ReapalWithdrawTrade implements TradeService {
         return "";
     }
 
-    private void reapalClientBuilder(com.magic.withdraw.reapal.ReapalConfig config) {
-        ReapalConfig reapalConfig = new ReapalConfig();
+    private ReapalConfig getConfig() {
+        TradePlatformConfig tradePlatformConfig = platformConfigService.get(PlatformConstant.REAPAL);
+        if (tradePlatformConfig instanceof ReapalConfig config) {
+            return config;
+        }
+        throw new IllegalStateException("reapal config is null");
+    }
+
+    protected Client buildClient(ReapalConfig config) {
+        com.reapal.api.ReapalConfig reapalConfig = new com.reapal.api.ReapalConfig();
         reapalConfig.setServerUrl(normalizeOpenApiDomain(config.getOpenApiDomain()));
         reapalConfig.setMerchantId(config.getMerchantId());
         reapalConfig.setSignType(config.getSignType());
@@ -265,11 +361,11 @@ public class ReapalWithdrawTrade implements TradeService {
         reapalConfig.setMerchantprivateCertPwd(config.getPrivateKeyPwd());
         reapalConfig.setEncryptId(config.getEncryptId());
         reapalConfig.setEncryptType(config.getEncryptType());
-        client = new DefaultClient(reapalConfig);
+        return new DefaultClient(reapalConfig);
     }
 
     private static DfTradeSubResult findTradeDetail(List<DfTradeSubResult> details, String orderNo) {
-        if (Objects.isNull(details) || details.isEmpty()) {
+        if (details == null || details.isEmpty()) {
             return null;
         }
         return details.stream()
@@ -287,28 +383,27 @@ public class ReapalWithdrawTrade implements TradeService {
                 || REAPAL_STATUS_SERVICE_REJECTED.equals(status)) {
             return OrderStatusConstant.FAIL;
         }
-        if (REAPAL_STATUS_PROCESSING.equals(status)) {
+        if (REAPAL_STATUS_PROCESSING.equals(status) || REAPAL_STATUS_WAIT_RECHARGE.equals(status)) {
             return OrderStatusConstant.PROCESSING;
         }
-        return OrderStatusConstant.PROCESSING;
+        return null;
     }
 
     private static String normalizeOpenApiDomain(String openApiDomain) {
-        if (Objects.isNull(openApiDomain)) {
+        if (openApiDomain == null) {
             return null;
         }
         return openApiDomain
                 .replace("/dforder/df/singleTrade", "")
                 .replace("/dforder/df/batchTrade", "")
                 .replace("/dforder/df/query", "")
+                .replace("/order/trade", "")
+                .replace("/order/query", "")
                 .replace("/member/merchant/account/balance", "")
                 .replaceAll("/+$", "");
     }
 
     private static Long convertBigDecimalToFenLong(BigDecimal amount) {
-        if (amount == null) {
-            return 0L;
-        }
-        return amount.multiply(HUNDRED).setScale(0, RoundingMode.DOWN).longValue();
+        return amount.movePointRight(2).longValueExact();
     }
 }
