@@ -43,36 +43,47 @@ public class HandleProcessingOrderServiceImpl {
         TimerTask task = new TimerTask() {
             @Override
             public void run() {
-                try {
-                    Collection<ProcessingOrder> processingOrders = processingOrderService.list();
-                    if (CollectionUtils.isEmpty(processingOrders)) {
-                        return;
-                    }
-                    for (ProcessingOrder processingOrder : processingOrders) {
-                        QueryResponse response = withdrawService.queryTradingOrderNo(
-                                processingOrder.getOrderNo(),
-                                processingOrder.getPlatform());
-
-                        if (Objects.equals(OrderStatusConstant.SUCCESS, response.getOrderStatus())) {
-                            callBackService.successWithdraw(
-                                    new WithdrawResult().setQueryBody(response.getResponseBody())
-                                            .setOrderNo(processingOrder.getOrderNo()));
-                            processingOrderService.remove(processingOrder);
-                        } else if (Objects.equals(OrderStatusConstant.FAIL, response.getOrderStatus()) ||
-                                    Objects.equals(OrderStatusConstant.REFUND, response.getOrderStatus())) {
-                            callBackService.failWithdraw(
-                                    new WithdrawResult().setQueryBody(response.getResponseBody())
-                                            .setOrderNo(processingOrder.getOrderNo())
-                                            .setFailReason(response.getFailReason())
-                            );
-                            processingOrderService.remove(processingOrder);
-                        }
-                    }
-                } catch (Exception e) {
-                    log.error("提现结果定期巡检任务异常",e);
-                }
+                processOrders();
             }
         };
         timer.schedule(task, callbackConfig.getCycle() * 1000, callbackConfig.getCycle() * 1000);
+    }
+
+    void processOrders() {
+        try {
+            Collection<ProcessingOrder> processingOrders = processingOrderService.list();
+            if (CollectionUtils.isEmpty(processingOrders)) {
+                return;
+            }
+            for (ProcessingOrder processingOrder : processingOrders) {
+                processOrder(processingOrder);
+            }
+        } catch (Exception e) {
+            log.error("提现结果定期巡检任务异常", e);
+        }
+    }
+
+    private void processOrder(ProcessingOrder processingOrder) {
+        QueryResponse response = withdrawService.queryTradingOrderNo(
+                processingOrder.getOrderNo(), processingOrder.getPlatform());
+        if (!response.isSuccess()) {
+            log.warn("订单状态查询失败，platform={}, orderNo={}, message={}",
+                    processingOrder.getPlatform(), processingOrder.getOrderNo(), response.getMessage());
+            return;
+        }
+        if (Objects.equals(OrderStatusConstant.SUCCESS, response.getOrderStatus())) {
+            callBackService.successWithdraw(new WithdrawResult()
+                    .setQueryBody(response.getResponseBody()).setOrderNo(processingOrder.getOrderNo()));
+            processingOrderService.remove(processingOrder);
+            return;
+        }
+        if (Objects.equals(OrderStatusConstant.FAIL, response.getOrderStatus())
+                || Objects.equals(OrderStatusConstant.REFUND, response.getOrderStatus())) {
+            callBackService.failWithdraw(new WithdrawResult()
+                    .setQueryBody(response.getResponseBody())
+                    .setOrderNo(processingOrder.getOrderNo())
+                    .setFailReason(response.getFailReason()));
+            processingOrderService.remove(processingOrder);
+        }
     }
 }

@@ -33,19 +33,21 @@ public class CallbackController {
         try {
             ValidResponse validResponse = valid.validWithdraw(httpEntity, request);
             String orderNo = validResponse.getOrderNo();
-            if(validResponse.isValid() && validResponse.isSuccess()){
+            if (!validResponse.isValid()) {
+                return valid.failResult();
+            }
+            if (validResponse.isSuccess()) {
                 callBackService.successWithdraw(
                         new WithdrawResult()
                                 .setCallBackBody(httpEntity.getBody())
                                 .setOrderNo(orderNo));
-                return valid.successResult();
             } else {
                 callBackService.failWithdraw(
                         new WithdrawResult()
                                 .setCallBackBody(httpEntity.getBody())
                                 .setOrderNo(orderNo));
-                return valid.failResult();
             }
+            return valid.successResult();
         }catch (Exception e){
             log.error("支付回调处理失败",e);
             return valid.failResult();

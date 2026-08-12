@@ -17,6 +17,7 @@ import com.magic.withdraw.core.service.TradeService;
 import com.magic.withdraw.core.service.WithdrawService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 /**
  * 提现实现类
@@ -39,7 +40,9 @@ public class WithdrawServiceImpl implements WithdrawService {
 
         SingleWithdrawResponse singleWithdrawResponse = getPlatFormService(platform).singleWithdraw(request);
 
-        if (callbackConfig.isEnabled()) {
+        if (callbackConfig.isEnabled()
+                && singleWithdrawResponse.isPollingRequired()
+                && StringUtils.hasText(singleWithdrawResponse.getOrderNo())) {
             ProcessingOrder processingOrder = new ProcessingOrder();
             processingOrder.setOrderNo(singleWithdrawResponse.getOrderNo());
             processingOrder.setPlatform(platform);

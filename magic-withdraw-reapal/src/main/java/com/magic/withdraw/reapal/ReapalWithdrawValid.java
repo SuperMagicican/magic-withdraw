@@ -5,6 +5,7 @@ import com.magic.withdraw.core.annotation.TradePlatform;
 import com.magic.withdraw.core.constants.PlatformConstant;
 import com.magic.withdraw.core.domain.response.ValidResponse;
 import com.magic.withdraw.core.exception.TradeException;
+import com.magic.withdraw.core.service.PlatformConfigService;
 import com.magic.withdraw.core.service.ValidService;
 import com.reapal.api.internal.util.ApiUtils;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
-import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.Map;
@@ -22,12 +22,11 @@ import java.util.Map;
  * @since 2026/1/15
  */
 @Slf4j
-@Service
 @RequiredArgsConstructor
 @TradePlatform(PlatformConstant.REAPAL)
 public class ReapalWithdrawValid implements ValidService {
 
-    private final ReapalWithdrawConfig reapalWithdrawConfig;
+    private final PlatformConfigService platformConfigService;
 
     @Override
     public ValidResponse validWithdraw(HttpEntity<String> httpEntity, HttpServletRequest request) throws TradeException {
@@ -54,7 +53,7 @@ public class ReapalWithdrawValid implements ValidService {
             }
             boolean verify = false;
             try {
-                verify = ApiUtils.checkSignTopRequestSM(body, sign, reapalWithdrawConfig.getReapalPublicKey());
+                verify = ApiUtils.checkSignTopRequestSM(body, sign, getConfig().getReapalPublicKey());
             } catch (Exception e) {
                 log.error("验签失败", e);
                 throw new TradeException("验签失败");
@@ -75,5 +74,12 @@ public class ReapalWithdrawValid implements ValidService {
     @Override
     public String failResult() {
         return "";
+    }
+
+    private ReapalConfig getConfig() {
+        if (platformConfigService.get(PlatformConstant.REAPAL) instanceof ReapalConfig config) {
+            return config;
+        }
+        throw new TradeException("reapal config is null");
     }
 }
