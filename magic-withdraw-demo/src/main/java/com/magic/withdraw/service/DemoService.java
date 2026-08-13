@@ -175,8 +175,8 @@ public class DemoService {
         reapalConfig.setMemberId("100000001600411");
         reapalConfig.setMemberIp("127.0.0.1");
         reapalConfig.setReturnUrl("https://merchant.example/reapal/return");
-        reapalConfig.setRechargeNotifyUrl(
-                "https://merchant.example/withdrawCallBack/notify/reapal/recharge");
+        reapalConfig.setRechargeQueryInterval(10L);
+        reapalConfig.setRechargeQueryTimeout(1800L);
         return reapalConfig;
     }
 

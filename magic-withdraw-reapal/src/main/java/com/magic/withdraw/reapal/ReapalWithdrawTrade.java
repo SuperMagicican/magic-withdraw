@@ -19,7 +19,6 @@ import com.magic.withdraw.core.service.PlatformConfigService;
 import com.magic.withdraw.core.service.TradeService;
 import com.magic.withdraw.reapal.recharge.ReapalRechargeService;
 import com.reapal.api.Client;
-import com.reapal.api.DefaultClient;
 import com.reapal.api.model.DfSingleTradeResult;
 import com.reapal.api.model.DfTradeSubResult;
 import com.reapal.api.request.DfTradeQueryRequest;
@@ -63,9 +62,11 @@ public class ReapalWithdrawTrade implements TradeService {
     private static final String REAPAL_STATUS_SUCCESS = "6";
     private static final String REAPAL_STATUS_FAIL = "7";
     private static final String REAPAL_STATUS_SERVICE_REJECTED = "10";
+    private static final String REAPAL_STATUS_CLOSED = "11";
     private static final String REAPAL_STATUS_WAIT_RECHARGE = "12";
     private final PlatformConfigService platformConfigService;
     private final ReapalRechargeService rechargeService;
+    private final ReapalClientFactory clientFactory;
 
     @Override
     public SingleWithdrawResponse singleWithdraw(SingleWithdrawRequest request) {
@@ -351,17 +352,7 @@ public class ReapalWithdrawTrade implements TradeService {
     }
 
     protected Client buildClient(ReapalConfig config) {
-        com.reapal.api.ReapalConfig reapalConfig = new com.reapal.api.ReapalConfig();
-        reapalConfig.setServerUrl(normalizeOpenApiDomain(config.getOpenApiDomain()));
-        reapalConfig.setMerchantId(config.getMerchantId());
-        reapalConfig.setSignType(config.getSignType());
-        reapalConfig.setSignId(config.getSignId());
-        reapalConfig.setReapalPublicCertPath(config.getReapalPublicKey());
-        reapalConfig.setMerchantprivateCertPath(config.getPrivateKey());
-        reapalConfig.setMerchantprivateCertPwd(config.getPrivateKeyPwd());
-        reapalConfig.setEncryptId(config.getEncryptId());
-        reapalConfig.setEncryptType(config.getEncryptType());
-        return new DefaultClient(reapalConfig);
+        return clientFactory.create(config);
     }
 
     private static DfTradeSubResult findTradeDetail(List<DfTradeSubResult> details, String orderNo) {
@@ -380,27 +371,14 @@ public class ReapalWithdrawTrade implements TradeService {
         }
         if (REAPAL_STATUS_FAIL.equals(status)
                 || REAPAL_STATUS_REJECTED.equals(status)
-                || REAPAL_STATUS_SERVICE_REJECTED.equals(status)) {
+                || REAPAL_STATUS_SERVICE_REJECTED.equals(status)
+                || REAPAL_STATUS_CLOSED.equals(status)) {
             return OrderStatusConstant.FAIL;
         }
         if (REAPAL_STATUS_PROCESSING.equals(status) || REAPAL_STATUS_WAIT_RECHARGE.equals(status)) {
             return OrderStatusConstant.PROCESSING;
         }
         return null;
-    }
-
-    private static String normalizeOpenApiDomain(String openApiDomain) {
-        if (openApiDomain == null) {
-            return null;
-        }
-        return openApiDomain
-                .replace("/dforder/df/singleTrade", "")
-                .replace("/dforder/df/batchTrade", "")
-                .replace("/dforder/df/query", "")
-                .replace("/order/trade", "")
-                .replace("/order/query", "")
-                .replace("/member/merchant/account/balance", "")
-                .replaceAll("/+$", "");
     }
 
     private static Long convertBigDecimalToFenLong(BigDecimal amount) {

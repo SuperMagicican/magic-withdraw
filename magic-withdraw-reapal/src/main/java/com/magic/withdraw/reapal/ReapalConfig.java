@@ -43,8 +43,11 @@ public class ReapalConfig
     /** 网银支付完成后的同步跳转地址 */
     private String returnUrl;
 
-    /** 融宝充值成功或失败后的服务端异步通知地址。 */
-    private String rechargeNotifyUrl;
+    /** 充值订单主动查询间隔，单位秒。 */
+    private long rechargeQueryInterval = 10;
+
+    /** 充值订单主动查询总时长，单位秒。 */
+    private long rechargeQueryTimeout = 1800;
 
     public enum RechargeMode {
         B2B_DIRECT,

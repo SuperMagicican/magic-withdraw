@@ -1,29 +1,36 @@
 package com.magic.withdraw.reapal.recharge;
 
+import java.util.Collection;
+
 /**
- * 充值订单与代付订单的关联存储。
+ * 融宝充值巡检任务存储。
  * 业务方可提供自定义 Bean，将默认内存实现替换为持久化实现。
  */
 public interface ReapalRechargeOrderStore {
 
-    /** 保存充值商户订单号与代付商户订单号的关系。 */
-    void save(String rechargeOrderNo, String payoutOrderNo);
+    /** 登记一笔待主动查询的充值订单。 */
+    void add(RechargePollingOrder order);
 
-    /** 原子领取一笔尚未处理的充值通知。 */
-    Claim claim(String rechargeOrderNo);
+    /** 返回当前已经到达查询时间的任务。 */
+    Collection<RechargePollingOrder> listDue(long currentTimeMillis);
 
-    /** 业务处理失败时释放领取状态，以便融宝重试通知。 */
-    void release(String rechargeOrderNo);
+    /** 更新下一次查询时间。 */
+    void reschedule(String rechargeOrderNo, long nextQueryTimeMillis);
 
-    /** 明确拒绝的充值订单不再保留映射。 */
+    /** 充值完成、失败或查询超时后移除任务。 */
     void remove(String rechargeOrderNo);
 
-    enum ClaimStatus {
-        CLAIMED,
-        ALREADY_HANDLED,
-        NOT_FOUND
-    }
-
-    record Claim(ClaimStatus status, String payoutOrderNo) {
+    /**
+     * @param rechargeOrderNo 充值商户订单号
+     * @param payoutOrderNo 代付商户订单号
+     * @param nextQueryTimeMillis 下一次查询时间
+     * @param expireTimeMillis 查询截止时间
+     * @param queryIntervalMillis 查询间隔
+     */
+    record RechargePollingOrder(String rechargeOrderNo,
+                                String payoutOrderNo,
+                                long nextQueryTimeMillis,
+                                long expireTimeMillis,
+                                long queryIntervalMillis) {
     }
 }

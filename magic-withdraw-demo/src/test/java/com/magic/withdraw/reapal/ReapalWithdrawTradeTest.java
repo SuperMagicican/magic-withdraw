@@ -7,11 +7,13 @@ import com.magic.withdraw.core.domain.response.QueryResponse;
 import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
 import com.magic.withdraw.reapal.ReapalSingleWithdrawData.SubmitStage;
 import com.magic.withdraw.core.service.PlatformConfigService;
+import com.magic.withdraw.core.service.impl.InMemoryProcessingOrderServiceImpl;
 import com.magic.withdraw.reapal.ReapalConfig.RechargeMode;
 import com.magic.withdraw.reapal.recharge.B2bDirectRechargeStrategy;
 import com.magic.withdraw.reapal.recharge.CashierRechargeStrategy;
 import com.magic.withdraw.reapal.recharge.InMemoryReapalRechargeOrderStore;
 import com.magic.withdraw.reapal.recharge.ReapalRechargeService;
+import com.magic.withdraw.reapal.recharge.ReapalRechargePollingService;
 import com.magic.withdraw.reapal.recharge.ReapalRechargeStrategyRegistry;
 import com.reapal.api.ApiException;
 import com.reapal.api.Client;
@@ -151,14 +153,47 @@ class ReapalWithdrawTradeTest {
         ambiguous.setCode("1001");
         ambiguous.setMsg("系统异常");
         FakeClient client = new FakeClient(payoutAccepted(125L), ambiguous,
-                rechargeQuery("processing"));
+                rechargeQuery("completed"));
 
         SingleWithdrawResponse response = createTrade(client).singleWithdraw(validRequest());
 
         assertTrue(response.isSuccess());
+        assertTrue(response.isPollingRequired());
         assertEquals(SubmitStage.RECHARGE_ACCEPTED, data(response).getSubmitStage());
         OrderQueryRequest queryRequest = assertInstanceOf(OrderQueryRequest.class, client.requests.get(2));
         assertEquals("RC-100", queryRequest.getMerchantOrderNo());
+    }
+
+    @Test
+    void shouldPollRechargeThenAddPayoutToPollingQueue() {
+        FakeClient client = new FakeClient(payoutAccepted(125L),
+                rechargeProcessing("https://bank.example/pay"), rechargeQuery("completed"));
+        ReapalConfig config = validConfig(RechargeMode.B2B_DIRECT, "0105");
+        PlatformConfigService configService = mock(PlatformConfigService.class);
+        when(configService.get(PlatformConstant.REAPAL)).thenReturn(config);
+        InMemoryReapalRechargeOrderStore orderStore = new InMemoryReapalRechargeOrderStore();
+        ReapalRechargeService rechargeService = new ReapalRechargeService(
+                strategyRegistry(), orderStore);
+        ReapalClientFactory clientFactory = new ReapalClientFactory() {
+            @Override
+            public Client create(ReapalConfig ignored) {
+                return client;
+            }
+        };
+
+        SingleWithdrawResponse response = new ReapalWithdrawTrade(
+                configService, rechargeService, clientFactory).singleWithdraw(validRequest());
+        assertTrue(response.isSuccess());
+        assertFalse(response.isPollingRequired());
+
+        orderStore.reschedule("RC-100", 0L);
+        InMemoryProcessingOrderServiceImpl payoutOrders = new InMemoryProcessingOrderServiceImpl();
+        new ReapalRechargePollingService(orderStore, payoutOrders, configService, clientFactory)
+                .pollDueOrders();
+
+        assertEquals(1, payoutOrders.list().size());
+        assertEquals("PAYOUT-100", payoutOrders.list().iterator().next().getOrderNo());
+        assertTrue(orderStore.listDue(Long.MAX_VALUE).isEmpty());
     }
 
     @Test
@@ -219,6 +254,7 @@ class ReapalWithdrawTradeTest {
             "7,FAIL",
             "4,FAIL",
             "10,FAIL",
+            "11,FAIL",
             "99,"
     })
     void shouldMapPayoutQueryStatuses(String reapalStatus, String expectedStatus) {
@@ -238,7 +274,21 @@ class ReapalWithdrawTradeTest {
     private static ReapalWithdrawTrade createTrade(FakeClient client, RechargeMode rechargeMode,
                                                     String rechargeBankNo) {
         PlatformConfigService platformConfigService = mock(PlatformConfigService.class);
-        ReapalConfig config = new ReapalConfig()
+        ReapalConfig config = validConfig(rechargeMode, rechargeBankNo);
+        when(platformConfigService.get(PlatformConstant.REAPAL)).thenReturn(config);
+        ReapalRechargeService rechargeService = new ReapalRechargeService(
+                strategyRegistry(), new InMemoryReapalRechargeOrderStore());
+        return new ReapalWithdrawTrade(platformConfigService, rechargeService,
+                new ReapalClientFactory()) {
+            @Override
+            protected Client buildClient(ReapalConfig ignored) {
+                return client;
+            }
+        };
+    }
+
+    private static ReapalConfig validConfig(RechargeMode rechargeMode, String rechargeBankNo) {
+        return new ReapalConfig()
                 .setOpenApiDomain("https://testopenapi.reapal.com:8443")
                 .setMerchantId("M-100")
                 .setCustomerId("C-100")
@@ -246,19 +296,14 @@ class ReapalWithdrawTradeTest {
                 .setRechargeBankNo(rechargeBankNo)
                 .setMemberId("MEMBER-100")
                 .setMemberIp("127.0.0.1")
-                .setRechargeNotifyUrl("https://merchant.example/reapal/recharge/notify")
+                .setRechargeQueryInterval(10L)
+                .setRechargeQueryTimeout(1800L)
                 .setReturnUrl("https://merchant.example/return");
-        when(platformConfigService.get(PlatformConstant.REAPAL)).thenReturn(config);
-        ReapalRechargeStrategyRegistry registry = new ReapalRechargeStrategyRegistry(List.of(
+    }
+
+    private static ReapalRechargeStrategyRegistry strategyRegistry() {
+        return new ReapalRechargeStrategyRegistry(List.of(
                 new B2bDirectRechargeStrategy(), new CashierRechargeStrategy()));
-        ReapalRechargeService rechargeService = new ReapalRechargeService(
-                registry, new InMemoryReapalRechargeOrderStore());
-        return new ReapalWithdrawTrade(platformConfigService, rechargeService) {
-            @Override
-            protected Client buildClient(ReapalConfig ignored) {
-                return client;
-            }
-        };
     }
 
     private static SingleWithdrawRequest validRequest() {

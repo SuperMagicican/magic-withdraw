@@ -93,7 +93,8 @@ reapalConfig.setRechargeMode(ReapalConfig.RechargeMode.B2B_DIRECT)
         .setRechargeBankNo("0102")
         .setMemberId("业务会员号")
         .setMemberIp("用户IP")
-        .setRechargeNotifyUrl("https://merchant.example/withdrawCallBack/notify/reapal/recharge")
+        .setRechargeQueryInterval(10)
+        .setRechargeQueryTimeout(1800)
         .setReturnUrl("https://merchant.example/reapal/return");
 
 SingleWithdrawRequest request = new SingleWithdrawRequest()
@@ -135,10 +136,10 @@ reapalConfig.setRechargeMode(ReapalConfig.RechargeMode.CASHIER)
 
 两种模式都返回 `paymentUrl`，均需要付款人手动完成充值；充值成功后融宝才会继续执行关联代付。
 
-融宝订单在充值状态为 `wait` 或 `processing` 时不会加入代付巡检。融宝向
-`rechargeNotifyUrl` 推送 `completed` 后，组件才将关联代付订单加入巡检；充值通知处理成功后返回
-`success`。默认使用内存保存充值订单与代付订单的关系，生产环境可提供
-`ReapalRechargeOrderStore` Bean 替换为持久化实现。
+融宝订单在充值状态为 `wait` 或 `processing` 时进入充值主动巡检队列。组件按
+`rechargeQueryInterval` 间隔查询充值订单，最长查询 `rechargeQueryTimeout` 秒；查询到
+`completed` 后将关联代付订单加入代付巡检。充值为 `failed`、`closed` 或查询超时后停止巡检。
+默认使用内存队列，生产环境可提供 `ReapalRechargeOrderStore` Bean 替换为持久化实现。
 
 ## 回调与巡检配置
 

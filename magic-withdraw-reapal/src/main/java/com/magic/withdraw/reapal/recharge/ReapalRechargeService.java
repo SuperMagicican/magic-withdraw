@@ -6,8 +6,7 @@ import com.magic.withdraw.core.domain.response.SingleWithdrawResponse;
 import com.magic.withdraw.reapal.ReapalConfig;
 import com.magic.withdraw.reapal.ReapalSingleWithdrawData;
 import com.magic.withdraw.reapal.ReapalSingleWithdrawData.SubmitStage;
-import com.magic.withdraw.reapal.recharge.ReapalRechargeOrderStore.Claim;
-import com.magic.withdraw.reapal.recharge.ReapalRechargeOrderStore.ClaimStatus;
+import com.magic.withdraw.reapal.recharge.ReapalRechargeOrderStore.RechargePollingOrder;
 import com.reapal.api.Client;
 import com.reapal.api.model.DfSingleTradeResult;
 import com.reapal.api.model.OrderQueryResult;
@@ -50,8 +49,11 @@ public class ReapalRechargeService {
         if (!StringUtils.hasText(config.getMemberIp())) {
             return "充值用户IP不能为空";
         }
-        if (!StringUtils.hasText(config.getRechargeNotifyUrl())) {
-            return "充值异步通知地址不能为空";
+        if (config.getRechargeQueryInterval() <= 0) {
+            return "充值查询间隔必须大于0秒";
+        }
+        if (config.getRechargeQueryTimeout() < config.getRechargeQueryInterval()) {
+            return "充值查询总时长不能小于查询间隔";
         }
         return strategy.validate(config);
     }
@@ -63,7 +65,6 @@ public class ReapalRechargeService {
                                          DfSingleTradeResult payoutResult) {
         ReapalRechargeStrategy strategy = strategyRegistry.get(config.getRechargeMode());
         TradeRequest rechargeRequest = buildRechargeRequest(config, request, payoutResult, strategy);
-        orderStore.save(request.getRechargeOrderNo(), request.getOrderNo());
         platformData.setRechargeRequestBody(JSON.toJSONString(rechargeRequest));
         TradeResponse rechargeResponse = null;
         Exception submitException = null;
@@ -71,7 +72,7 @@ public class ReapalRechargeService {
             rechargeResponse = client.execute(rechargeRequest);
             platformData.setRechargeResponseBody(JSON.toJSONString(rechargeResponse));
             log.info("融宝订单代付充值响应结果：{}", platformData.getRechargeResponseBody());
-            if (applySubmitResult(response, platformData, rechargeResponse)) {
+            if (applySubmitResult(response, platformData, rechargeResponse, config)) {
                 return response;
             }
         } catch (Exception e) {
@@ -96,7 +97,7 @@ public class ReapalRechargeService {
             queryResponse = client.execute(queryRequest);
             log.info("融宝订单代付充值对账响应结果：{}", JSON.toJSONString(queryResponse));
             platformData.setRechargeResponseBody(mergeResponses(rechargeResponse, queryResponse));
-            if (applyQueryResult(response, platformData, queryResponse)) {
+            if (applyQueryResult(response, platformData, queryResponse, config)) {
                 return response;
             }
         } catch (Exception queryException) {
@@ -112,7 +113,8 @@ public class ReapalRechargeService {
 
     private boolean applySubmitResult(SingleWithdrawResponse response,
                                       ReapalSingleWithdrawData platformData,
-                                      TradeResponse rechargeResponse) {
+                                      TradeResponse rechargeResponse,
+                                      ReapalConfig config) {
         if (rechargeResponse == null || !REAPAL_SUCCESS_CODE.equals(rechargeResponse.getCode())
                 || rechargeResponse.getData() == null) {
             return false;
@@ -139,14 +141,15 @@ public class ReapalRechargeService {
 
         response.setSuccess(true);
         platformData.setSubmitStage(SubmitStage.RECHARGE_ACCEPTED);
-        updatePollingRequirement(response, platformData.getRechargeOrderNo(), result.getOrderStatus());
+        updatePollingRequirement(response, platformData, config, result.getOrderStatus());
         response.setMessage(result.getResultMsg());
         return true;
     }
 
     private boolean applyQueryResult(SingleWithdrawResponse response,
                                      ReapalSingleWithdrawData platformData,
-                                     OrderQueryResponse queryResponse) {
+                                     OrderQueryResponse queryResponse,
+                                     ReapalConfig config) {
         if (queryResponse == null || !REAPAL_SUCCESS_CODE.equals(queryResponse.getCode())
                 || queryResponse.getData() == null) {
             return false;
@@ -158,9 +161,13 @@ public class ReapalRechargeService {
             platformData.setRechargeAmount(result.getAmount());
         }
         if (ACCEPTED_STATUSES.contains(result.getOrdersts())) {
+            if (!"completed".equals(result.getOrdersts())
+                    && !StringUtils.hasText(platformData.getPaymentUrl())) {
+                return false;
+            }
             response.setSuccess(true);
             platformData.setSubmitStage(SubmitStage.RECHARGE_ACCEPTED);
-            updatePollingRequirement(response, platformData.getRechargeOrderNo(), result.getOrdersts());
+            updatePollingRequirement(response, platformData, config, result.getOrdersts());
             response.setMessage(queryResponse.getMsg());
             return true;
         }
@@ -189,7 +196,6 @@ public class ReapalRechargeService {
         rechargeRequest.setBusinessCode(RECHARGE_BUSINESS_CODE);
         rechargeRequest.setProductCode(strategy.productCode());
         rechargeRequest.setIsMember(NON_MEMBER_PAYMENT);
-        rechargeRequest.setNotifyUrl(config.getRechargeNotifyUrl());
         rechargeRequest.setReturnUrl(config.getReturnUrl());
         rechargeRequest.setSubject(title);
         rechargeRequest.setBody(title);
@@ -201,14 +207,20 @@ public class ReapalRechargeService {
     }
 
     private void updatePollingRequirement(SingleWithdrawResponse response,
-                                          String rechargeOrderNo,
+                                          ReapalSingleWithdrawData platformData,
+                                          ReapalConfig config,
                                           String rechargeStatus) {
-        if (!"completed".equals(rechargeStatus)) {
-            response.setPollingRequired(false);
+        if ("completed".equals(rechargeStatus)) {
+            response.setPollingRequired(true);
             return;
         }
-        Claim claim = orderStore.claim(rechargeOrderNo);
-        response.setPollingRequired(claim.status() == ClaimStatus.CLAIMED);
+        response.setPollingRequired(false);
+        long now = System.currentTimeMillis();
+        long intervalMillis = Math.multiplyExact(config.getRechargeQueryInterval(), 1000L);
+        long timeoutMillis = Math.multiplyExact(config.getRechargeQueryTimeout(), 1000L);
+        orderStore.add(new RechargePollingOrder(
+                platformData.getRechargeOrderNo(), response.getOrderNo(),
+                now + intervalMillis, now + timeoutMillis, intervalMillis));
     }
 
     private static void populateResponse(ReapalSingleWithdrawData platformData, TradeResult result) {
