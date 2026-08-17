@@ -6,8 +6,8 @@ import com.magic.withdraw.core.service.PlatformConfigService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * @author lgy
@@ -17,7 +17,8 @@ import java.util.Map;
 @Service
 public class PlatformConfigServiceImpl implements PlatformConfigService {
 
-    private final Map<String, TradePlatformConfig> platformConfigMap = new HashMap<>();
+    private final ConcurrentMap<String, TradePlatformConfig> platformConfigMap =
+            new ConcurrentHashMap<>();
 
     @Override
     public void set(String platform, TradePlatformConfig config) {

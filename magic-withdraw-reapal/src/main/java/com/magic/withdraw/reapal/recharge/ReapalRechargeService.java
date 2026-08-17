@@ -9,18 +9,13 @@ import com.magic.withdraw.reapal.ReapalSingleWithdrawData.SubmitStage;
 import com.magic.withdraw.reapal.recharge.ReapalRechargeOrderStore.RechargePollingOrder;
 import com.reapal.api.Client;
 import com.reapal.api.model.DfSingleTradeResult;
-import com.reapal.api.model.OrderQueryResult;
 import com.reapal.api.model.TradeResult;
-import com.reapal.api.request.OrderQueryRequest;
 import com.reapal.api.request.TradeRequest;
-import com.reapal.api.response.OrderQueryResponse;
 import com.reapal.api.response.TradeResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -77,37 +72,11 @@ public class ReapalRechargeService {
             }
         } catch (Exception e) {
             submitException = e;
-            log.warn("融宝订单代付充值响应不明确，准备查询充值订单：{}", request.getRechargeOrderNo(), e);
+            log.warn("融宝订单代付充值失败：{}", request.getRechargeOrderNo(), e);
         }
-        return reconcile(client, config, request.getRechargeOrderNo(), response, platformData,
-                rechargeResponse, submitException);
-    }
-
-    private SingleWithdrawResponse reconcile(Client client, ReapalConfig config,
-                                              String rechargeOrderNo,
-                                              SingleWithdrawResponse response,
-                                              ReapalSingleWithdrawData platformData,
-                                              TradeResponse rechargeResponse,
-                                              Exception submitException) {
-        OrderQueryResponse queryResponse = null;
-        try {
-            OrderQueryRequest queryRequest = new OrderQueryRequest();
-            queryRequest.setMerchantId(config.getMerchantId());
-            queryRequest.setMerchantOrderNo(rechargeOrderNo);
-            queryResponse = client.execute(queryRequest);
-            log.info("融宝订单代付充值对账响应结果：{}", JSON.toJSONString(queryResponse));
-            platformData.setRechargeResponseBody(mergeResponses(rechargeResponse, queryResponse));
-            if (applyQueryResult(response, platformData, queryResponse, config)) {
-                return response;
-            }
-        } catch (Exception queryException) {
-            log.warn("融宝订单代付充值对账失败：{}", rechargeOrderNo, queryException);
-            platformData.setRechargeResponseBody(mergeResponses(rechargeResponse, queryResponse));
-        }
-
         response.setSuccess(false);
         platformData.setSubmitStage(SubmitStage.RECHARGE_UNKNOWN);
-        response.setMessage(submitException == null ? "融宝充值结果暂时无法确认" : submitException.getMessage());
+        response.setMessage(resolveFailureMessage(rechargeResponse, submitException));
         return response;
     }
 
@@ -144,41 +113,6 @@ public class ReapalRechargeService {
         updatePollingRequirement(response, platformData, config, result.getOrderStatus());
         response.setMessage(result.getResultMsg());
         return true;
-    }
-
-    private boolean applyQueryResult(SingleWithdrawResponse response,
-                                     ReapalSingleWithdrawData platformData,
-                                     OrderQueryResponse queryResponse,
-                                     ReapalConfig config) {
-        if (queryResponse == null || !REAPAL_SUCCESS_CODE.equals(queryResponse.getCode())
-                || queryResponse.getData() == null) {
-            return false;
-        }
-        OrderQueryResult result = queryResponse.getData();
-        platformData.setRechargeOutOrderNo(result.getOrderId());
-        platformData.setRechargeStatus(result.getOrdersts());
-        if (result.getAmount() != null) {
-            platformData.setRechargeAmount(result.getAmount());
-        }
-        if (ACCEPTED_STATUSES.contains(result.getOrdersts())) {
-            if (!"completed".equals(result.getOrdersts())
-                    && !StringUtils.hasText(platformData.getPaymentUrl())) {
-                return false;
-            }
-            response.setSuccess(true);
-            platformData.setSubmitStage(SubmitStage.RECHARGE_ACCEPTED);
-            updatePollingRequirement(response, platformData, config, result.getOrdersts());
-            response.setMessage(queryResponse.getMsg());
-            return true;
-        }
-        if (FAILED_STATUSES.contains(result.getOrdersts())) {
-            orderStore.remove(platformData.getRechargeOrderNo());
-            response.setSuccess(false);
-            platformData.setSubmitStage(SubmitStage.RECHARGE_REJECTED);
-            response.setMessage(queryResponse.getMsg());
-            return true;
-        }
-        return false;
     }
 
     private static TradeRequest buildRechargeRequest(ReapalConfig config,
@@ -238,10 +172,13 @@ public class ReapalRechargeService {
         }
     }
 
-    private static String mergeResponses(TradeResponse submitResponse, OrderQueryResponse queryResponse) {
-        Map<String, Object> responses = new LinkedHashMap<>();
-        responses.put("submit", submitResponse);
-        responses.put("query", queryResponse);
-        return JSON.toJSONString(responses);
+    private static String resolveFailureMessage(TradeResponse response, Exception exception) {
+        if (exception != null && StringUtils.hasText(exception.getMessage())) {
+            return exception.getMessage();
+        }
+        if (response != null && StringUtils.hasText(response.getMsg())) {
+            return response.getMsg();
+        }
+        return "融宝充值失败，未返回付款地址";
     }
 }

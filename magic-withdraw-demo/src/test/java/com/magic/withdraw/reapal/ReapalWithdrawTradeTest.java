@@ -25,7 +25,6 @@ import com.reapal.api.model.TradeResult;
 import com.reapal.api.request.BaseRequest;
 import com.reapal.api.request.DfTradeQueryRequest;
 import com.reapal.api.request.DfSingleTradeRequest;
-import com.reapal.api.request.OrderQueryRequest;
 import com.reapal.api.request.TradeRequest;
 import com.reapal.api.response.BaseResponse;
 import com.reapal.api.response.DfTradeQueryResponse;
@@ -35,6 +34,7 @@ import com.reapal.api.response.TradeResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
@@ -148,26 +148,25 @@ class ReapalWithdrawTradeTest {
     }
 
     @Test
-    void shouldReconcileAmbiguousRechargeByRechargeOrderNumber() {
+    void shouldFailAmbiguousRechargeWithoutQueryingAgain() {
         TradeResponse ambiguous = new TradeResponse();
         ambiguous.setCode("1001");
         ambiguous.setMsg("系统异常");
-        FakeClient client = new FakeClient(payoutAccepted(125L), ambiguous,
-                rechargeQuery("completed"));
+        FakeClient client = new FakeClient(payoutAccepted(125L), ambiguous);
 
         SingleWithdrawResponse response = createTrade(client).singleWithdraw(validRequest());
 
-        assertTrue(response.isSuccess());
-        assertTrue(response.isPollingRequired());
-        assertEquals(SubmitStage.RECHARGE_ACCEPTED, data(response).getSubmitStage());
-        OrderQueryRequest queryRequest = assertInstanceOf(OrderQueryRequest.class, client.requests.get(2));
-        assertEquals("RC-100", queryRequest.getMerchantOrderNo());
+        assertFalse(response.isSuccess());
+        assertFalse(response.isPollingRequired());
+        assertEquals(SubmitStage.RECHARGE_UNKNOWN, data(response).getSubmitStage());
+        assertEquals(2, client.requests.size());
     }
 
-    @Test
-    void shouldPollRechargeThenAddPayoutToPollingQueue() {
+    @ParameterizedTest
+    @ValueSource(strings = {"completed", "failed", "closed"})
+    void shouldAddPayoutToPollingQueueWhenRechargeFinishes(String rechargeStatus) {
         FakeClient client = new FakeClient(payoutAccepted(125L),
-                rechargeProcessing("https://bank.example/pay"), rechargeQuery("completed"));
+                rechargeProcessing("https://bank.example/pay"), rechargeQuery(rechargeStatus));
         ReapalConfig config = validConfig(RechargeMode.B2B_DIRECT, "0105");
         PlatformConfigService configService = mock(PlatformConfigService.class);
         when(configService.get(PlatformConstant.REAPAL)).thenReturn(config);
@@ -197,22 +196,21 @@ class ReapalWithdrawTradeTest {
     }
 
     @Test
-    void shouldRejectRechargeWhenReconciliationFindsFailedOrder() {
-        TradeResponse ambiguous = new TradeResponse();
-        ambiguous.setCode("1001");
-        FakeClient client = new FakeClient(payoutAccepted(125L), ambiguous, rechargeQuery("failed"));
+    void shouldStartPayoutPollingWhenRechargeAlreadyCompleted() {
+        FakeClient client = new FakeClient(payoutAccepted(125L), rechargeCompleted());
 
         SingleWithdrawResponse response = createTrade(client).singleWithdraw(validRequest());
 
-        assertFalse(response.isSuccess());
-        assertEquals(SubmitStage.RECHARGE_REJECTED, data(response).getSubmitStage());
-        assertEquals("failed", data(response).getRechargeStatus());
+        assertTrue(response.isSuccess());
+        assertTrue(response.isPollingRequired());
+        assertEquals(SubmitStage.RECHARGE_ACCEPTED, data(response).getSubmitStage());
+        assertEquals("completed", data(response).getRechargeStatus());
+        assertEquals(2, client.requests.size());
     }
 
     @Test
     void shouldKeepPayoutIdentifiersWhenRechargeRemainsUnknown() {
-        FakeClient client = new FakeClient(payoutAccepted(125L), new ApiException("timeout"),
-                new ApiException("query timeout"));
+        FakeClient client = new FakeClient(payoutAccepted(125L), new ApiException("timeout"));
 
         SingleWithdrawResponse response = createTrade(client).singleWithdraw(validRequest());
 
@@ -222,6 +220,7 @@ class ReapalWithdrawTradeTest {
         assertEquals("DF-100", response.getOutOrderNo());
         assertEquals("RC-100", data(response).getRechargeOrderNo());
         assertEquals(125L, data(response).getRechargeAmount());
+        assertEquals(2, client.requests.size());
     }
 
     @Test
@@ -357,6 +356,20 @@ class ReapalWithdrawTradeTest {
         result.setMerchantOrderNo("RC-100");
         result.setOrderId("PAY-100");
         result.setOrderStatus("failed");
+        TradeResponse response = new TradeResponse();
+        response.setCode("0000");
+        response.setData(result);
+        return response;
+    }
+
+    private static TradeResponse rechargeCompleted() {
+        TradeResult result = new TradeResult();
+        result.setResultCode("0000");
+        result.setResultMsg("充值成功");
+        result.setMerchantOrderNo("RC-100");
+        result.setOrderId("PAY-100");
+        result.setAmount(125L);
+        result.setOrderStatus("completed");
         TradeResponse response = new TradeResponse();
         response.setCode("0000");
         response.setData(result);

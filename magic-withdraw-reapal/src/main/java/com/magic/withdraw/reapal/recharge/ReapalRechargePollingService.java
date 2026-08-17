@@ -72,14 +72,11 @@ public class ReapalRechargePollingService {
             return;
         }
         String status = response.getData().getOrdersts();
-        if (COMPLETED.equals(status)) {
+        if (COMPLETED.equals(status) || FAILED_STATUSES.contains(status)) {
             addPayoutPolling(order);
             orderStore.remove(order.rechargeOrderNo());
-            return;
-        }
-        if (FAILED_STATUSES.contains(status)) {
-            log.warn("融宝充值订单终止，rechargeOrderNo={}, status={}", order.rechargeOrderNo(), status);
-            orderStore.remove(order.rechargeOrderNo());
+            log.info("融宝充值已结束，代付订单进入结果巡检，rechargeOrderNo={}, status={}",
+                    order.rechargeOrderNo(), status);
             return;
         }
         rescheduleOrExpire(order, now);
@@ -90,7 +87,7 @@ public class ReapalRechargePollingService {
         processingOrder.setOrderNo(order.payoutOrderNo());
         processingOrder.setPlatform(PlatformConstant.REAPAL);
         processingOrderService.add(processingOrder);
-        log.info("融宝充值完成，代付订单已加入巡检，payoutOrderNo={}", order.payoutOrderNo());
+        log.info("融宝代付订单已加入结果巡检，payoutOrderNo={}", order.payoutOrderNo());
     }
 
     private void rescheduleOrExpire(RechargePollingOrder order, long now) {
