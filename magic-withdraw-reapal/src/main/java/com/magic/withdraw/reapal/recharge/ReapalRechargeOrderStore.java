@@ -8,8 +8,14 @@ import java.util.Collection;
  */
 public interface ReapalRechargeOrderStore {
 
-    /** 登记一笔待主动查询的充值订单。 */
+    /**
+     * 登记一笔待主动查询的充值订单。
+     * 同一代付订单已存在充值查询任务时，必须拒绝新任务。
+     */
     void add(RechargePollingOrder order);
+
+    /** 获取代付订单当前关联的充值任务。 */
+    RechargePollingOrder getByPayoutOrderNo(String payoutOrderNo);
 
     /** 返回当前已经到达查询时间的任务。 */
     Collection<RechargePollingOrder> listDue(long currentTimeMillis);
@@ -17,8 +23,11 @@ public interface ReapalRechargeOrderStore {
     /** 更新下一次查询时间。 */
     void reschedule(String rechargeOrderNo, long nextQueryTimeMillis);
 
-    /** 充值完成、失败或查询超时后移除任务。 */
+    /** 充值查询得到终态或查询超时后移除任务。 */
     void remove(String rechargeOrderNo);
+
+    /** 按代付订单移除当前关联的充值任务。 */
+    void removeByPayoutOrderNo(String payoutOrderNo);
 
     /**
      * @param rechargeOrderNo 充值商户订单号

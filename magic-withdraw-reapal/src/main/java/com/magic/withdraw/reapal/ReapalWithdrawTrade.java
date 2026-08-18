@@ -111,7 +111,8 @@ public class ReapalWithdrawTrade implements TradeService {
 
             DfSingleTradeResult payoutResult = payoutResponse.getData();
             populatePayoutResponse(response, platformData, payoutResult);
-            return rechargeService.submit(client, config, request, response, platformData, payoutResult);
+            return rechargeService.submitForWithdraw(
+                    client, config, request, response, platformData, payoutResult);
         } catch (Exception e) {
             log.error("融宝订单代付提交异常", e);
             response.setSuccess(false);

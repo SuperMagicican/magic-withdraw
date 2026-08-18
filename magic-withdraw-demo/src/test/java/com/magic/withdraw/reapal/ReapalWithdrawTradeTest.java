@@ -11,7 +11,13 @@ import com.magic.withdraw.core.service.impl.InMemoryProcessingOrderServiceImpl;
 import com.magic.withdraw.reapal.ReapalConfig.RechargeMode;
 import com.magic.withdraw.reapal.recharge.B2bDirectRechargeStrategy;
 import com.magic.withdraw.reapal.recharge.CashierRechargeStrategy;
+import com.magic.withdraw.reapal.recharge.DefaultReapalRechargeCallback;
 import com.magic.withdraw.reapal.recharge.InMemoryReapalRechargeOrderStore;
+import com.magic.withdraw.reapal.recharge.ReapalRechargeCallback;
+import com.magic.withdraw.reapal.recharge.ReapalRechargeQueryResult;
+import com.magic.withdraw.reapal.recharge.ReapalRechargeRequest;
+import com.magic.withdraw.reapal.recharge.ReapalRechargeResponse;
+import com.magic.withdraw.reapal.recharge.ReapalRechargeOrderStore.RechargePollingOrder;
 import com.magic.withdraw.reapal.recharge.ReapalRechargeService;
 import com.magic.withdraw.reapal.recharge.ReapalRechargePollingService;
 import com.magic.withdraw.reapal.recharge.ReapalRechargeStrategyRegistry;
@@ -25,6 +31,7 @@ import com.reapal.api.model.TradeResult;
 import com.reapal.api.request.BaseRequest;
 import com.reapal.api.request.DfTradeQueryRequest;
 import com.reapal.api.request.DfSingleTradeRequest;
+import com.reapal.api.request.OrderQueryRequest;
 import com.reapal.api.request.TradeRequest;
 import com.reapal.api.response.BaseResponse;
 import com.reapal.api.response.DfTradeQueryResponse;
@@ -46,6 +53,9 @@ import java.util.Queue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -105,7 +115,7 @@ class ReapalWithdrawTradeTest {
         assertEquals("https://cashier.example/pay", data(response).getPaymentUrl());
         TradeRequest rechargeRequest = assertInstanceOf(TradeRequest.class, client.requests.get(1));
         assertEquals("CASHIER", rechargeRequest.getProductCode());
-        assertTrue(rechargeRequest.getExpend().isEmpty());
+        assertEquals(Map.of("pyeeAcctType", "20"), rechargeRequest.getExpend());
     }
 
     @Test
@@ -162,23 +172,22 @@ class ReapalWithdrawTradeTest {
         assertEquals(2, client.requests.size());
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"completed", "failed", "closed"})
-    void shouldAddPayoutToPollingQueueWhenRechargeFinishes(String rechargeStatus) {
+    @Test
+    void shouldAddPayoutToPollingQueueWhenRechargeSucceeds() {
         FakeClient client = new FakeClient(payoutAccepted(125L),
-                rechargeProcessing("https://bank.example/pay"), rechargeQuery(rechargeStatus));
+                rechargeProcessing("https://bank.example/pay"), rechargeQuery("completed"));
         ReapalConfig config = validConfig(RechargeMode.B2B_DIRECT, "0105");
         PlatformConfigService configService = mock(PlatformConfigService.class);
         when(configService.get(PlatformConstant.REAPAL)).thenReturn(config);
         InMemoryReapalRechargeOrderStore orderStore = new InMemoryReapalRechargeOrderStore();
-        ReapalRechargeService rechargeService = new ReapalRechargeService(
-                strategyRegistry(), orderStore);
         ReapalClientFactory clientFactory = new ReapalClientFactory() {
             @Override
             public Client create(ReapalConfig ignored) {
                 return client;
             }
         };
+        ReapalRechargeService rechargeService = new ReapalRechargeService(
+                strategyRegistry(), orderStore, configService, clientFactory);
 
         SingleWithdrawResponse response = new ReapalWithdrawTrade(
                 configService, rechargeService, clientFactory).singleWithdraw(validRequest());
@@ -187,12 +196,263 @@ class ReapalWithdrawTradeTest {
 
         orderStore.reschedule("RC-100", 0L);
         InMemoryProcessingOrderServiceImpl payoutOrders = new InMemoryProcessingOrderServiceImpl();
-        new ReapalRechargePollingService(orderStore, payoutOrders, configService, clientFactory)
+        DefaultReapalRechargeCallback callback =
+                new DefaultReapalRechargeCallback(payoutOrders);
+        new ReapalRechargePollingService(orderStore, rechargeService, callback)
                 .pollDueOrders();
 
         assertEquals(1, payoutOrders.list().size());
         assertEquals("PAYOUT-100", payoutOrders.list().iterator().next().getOrderNo());
         assertTrue(orderStore.listDue(Long.MAX_VALUE).isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"failed", "closed"})
+    void shouldRemovePollingOrderWithoutCallbackWhenRechargeFails(
+            String rechargeStatus) {
+        FakeClient client = new FakeClient(payoutAccepted(125L),
+                rechargeProcessing("https://bank.example/pay"), rechargeQuery(rechargeStatus));
+        ReapalConfig config = validConfig(RechargeMode.B2B_DIRECT, "0105");
+        PlatformConfigService configService = mock(PlatformConfigService.class);
+        when(configService.get(PlatformConstant.REAPAL)).thenReturn(config);
+        InMemoryReapalRechargeOrderStore orderStore = new InMemoryReapalRechargeOrderStore();
+        ReapalClientFactory clientFactory = new ReapalClientFactory() {
+            @Override
+            public Client create(ReapalConfig ignored) {
+                return client;
+            }
+        };
+        ReapalRechargeService rechargeService = new ReapalRechargeService(
+                strategyRegistry(), orderStore, configService, clientFactory);
+        SingleWithdrawResponse response = new ReapalWithdrawTrade(
+                configService, rechargeService, clientFactory).singleWithdraw(validRequest());
+        assertTrue(response.isSuccess());
+
+        orderStore.reschedule("RC-100", 0L);
+        RecordingRechargeCallback callback = new RecordingRechargeCallback();
+        new ReapalRechargePollingService(orderStore, rechargeService, callback)
+                .pollDueOrders();
+
+        assertNull(callback.successResult);
+        assertTrue(orderStore.listDue(Long.MAX_VALUE).isEmpty());
+    }
+
+    @Test
+    void shouldExposeStandaloneRechargeSubmitAndQuery() {
+        FakeClient client = new FakeClient(
+                rechargeProcessing("https://cashier.example/pay"),
+                rechargeQuery("completed"));
+        ReapalConfig config = validConfig(RechargeMode.CASHIER, null);
+        PlatformConfigService configService = mock(PlatformConfigService.class);
+        when(configService.get(PlatformConstant.REAPAL)).thenReturn(config);
+        InMemoryReapalRechargeOrderStore orderStore = new InMemoryReapalRechargeOrderStore();
+        ReapalClientFactory clientFactory = new ReapalClientFactory() {
+            @Override
+            public Client create(ReapalConfig ignored) {
+                return client;
+            }
+        };
+        ReapalRechargeService rechargeService = new ReapalRechargeService(
+                strategyRegistry(), orderStore, configService, clientFactory);
+
+        ReapalRechargeResponse submitResponse = rechargeService.submit(
+                new ReapalRechargeRequest()
+                        .setRechargeOrderNo("RC-100")
+                        .setPayoutOrderNo("PAYOUT-100")
+                        .setPayoutOutOrderNo("DF-100")
+                        .setAmount(125L)
+                        .setOrderTitle("订单代付测试"));
+        ReapalRechargeQueryResult queryResult = rechargeService.query("RC-100");
+
+        assertTrue(submitResponse.isSuccess());
+        assertTrue(submitResponse.isPollingRequired());
+        assertEquals("https://cashier.example/pay", submitResponse.getPaymentUrl());
+        assertTrue(queryResult.isQuerySuccessful());
+        assertEquals(ReapalRechargeQueryResult.RechargeState.SUCCESS,
+                queryResult.getState());
+        assertInstanceOf(TradeRequest.class, client.requests.get(0));
+    }
+
+    @Test
+    void shouldRejectDirectReplacementWhileCurrentRechargeExists() {
+        InMemoryReapalRechargeOrderStore orderStore =
+                new InMemoryReapalRechargeOrderStore();
+        orderStore.add(new RechargePollingOrder(
+                "RC-OLD", "PAYOUT-100", 10L, 100L, 10L));
+
+        assertThrows(IllegalStateException.class, () -> orderStore.add(
+                new RechargePollingOrder(
+                        "RC-NEW", "PAYOUT-100", 20L, 200L, 10L)));
+
+        RechargePollingOrder current =
+                orderStore.getByPayoutOrderNo("PAYOUT-100");
+        assertEquals("RC-OLD", current.rechargeOrderNo());
+    }
+
+    @Test
+    void shouldStartNewRechargeAfterPreviousPollingOrderIsRemoved() {
+        FakeClient client = new FakeClient(
+                rechargeProcessing("https://cashier.example/new"),
+                rechargeQuery("completed"));
+        ReapalConfig config = validConfig(RechargeMode.CASHIER, null);
+        PlatformConfigService configService = mock(PlatformConfigService.class);
+        when(configService.get(PlatformConstant.REAPAL)).thenReturn(config);
+        InMemoryReapalRechargeOrderStore orderStore =
+                new InMemoryReapalRechargeOrderStore();
+        orderStore.add(new RechargePollingOrder(
+                "RC-OLD", "PAYOUT-100", 10L, 1_000L, 10L));
+        orderStore.remove("RC-OLD");
+        ReapalClientFactory clientFactory = new ReapalClientFactory() {
+            @Override
+            public Client create(ReapalConfig ignored) {
+                return client;
+            }
+        };
+        ReapalRechargeService rechargeService = new ReapalRechargeService(
+                strategyRegistry(), orderStore, configService, clientFactory);
+
+        ReapalRechargeResponse response = rechargeService.submit(
+                new ReapalRechargeRequest()
+                        .setRechargeOrderNo("RC-100")
+                        .setPayoutOrderNo("PAYOUT-100")
+                        .setPayoutOutOrderNo("DF-100")
+                        .setAmount(125L));
+
+        assertTrue(response.isSuccess());
+        assertEquals("https://cashier.example/new", response.getPaymentUrl());
+        assertEquals("RC-100", orderStore.getByPayoutOrderNo("PAYOUT-100")
+                .rechargeOrderNo());
+        assertFalse(orderStore.listDue(Long.MAX_VALUE).stream()
+                .anyMatch(order -> "RC-OLD".equals(order.rechargeOrderNo())));
+
+        orderStore.reschedule("RC-100", 0L);
+        InMemoryProcessingOrderServiceImpl payoutOrders =
+                new InMemoryProcessingOrderServiceImpl();
+        new ReapalRechargePollingService(
+                orderStore,
+                rechargeService,
+                new DefaultReapalRechargeCallback(payoutOrders))
+                .pollDueOrders();
+
+        assertEquals(1, payoutOrders.list().size());
+        assertEquals("PAYOUT-100", payoutOrders.list().iterator().next().getOrderNo());
+        assertTrue(orderStore.listDue(Long.MAX_VALUE).isEmpty());
+    }
+
+    @Test
+    void shouldRejectNewRechargeWithoutQueryWhenPollingOrderExists() {
+        FakeClient client = new FakeClient();
+        ReapalConfig config = validConfig(RechargeMode.CASHIER, null);
+        PlatformConfigService configService = mock(PlatformConfigService.class);
+        when(configService.get(PlatformConstant.REAPAL)).thenReturn(config);
+        InMemoryReapalRechargeOrderStore orderStore =
+                new InMemoryReapalRechargeOrderStore();
+        orderStore.add(new RechargePollingOrder(
+                "RC-OLD", "PAYOUT-100", 10L, 1_000L, 10L));
+        ReapalClientFactory clientFactory = new ReapalClientFactory() {
+            @Override
+            public Client create(ReapalConfig ignored) {
+                return client;
+            }
+        };
+        ReapalRechargeService rechargeService = new ReapalRechargeService(
+                strategyRegistry(), orderStore, configService, clientFactory);
+
+        ReapalRechargeResponse response = rechargeService.submit(
+                new ReapalRechargeRequest()
+                        .setRechargeOrderNo("RC-100")
+                        .setPayoutOrderNo("PAYOUT-100")
+                        .setPayoutOutOrderNo("DF-100")
+                        .setAmount(125L));
+
+        assertFalse(response.isSuccess());
+        assertTrue(response.getMessage().contains("存在待查询的充值订单"));
+        assertEquals("RC-OLD", orderStore.getByPayoutOrderNo("PAYOUT-100")
+                .rechargeOrderNo());
+        assertTrue(client.requests.isEmpty());
+    }
+
+    @Test
+    void shouldRemoveRechargePollingOrderWhenQueryTimesOut() {
+        FakeClient client = new FakeClient();
+        ReapalConfig config = validConfig(RechargeMode.CASHIER, null);
+        PlatformConfigService configService = mock(PlatformConfigService.class);
+        when(configService.get(PlatformConstant.REAPAL)).thenReturn(config);
+        InMemoryReapalRechargeOrderStore orderStore =
+                new InMemoryReapalRechargeOrderStore();
+        orderStore.add(new RechargePollingOrder(
+                "RC-100", "PAYOUT-100", 0L, 0L, 10L));
+        ReapalClientFactory clientFactory = new ReapalClientFactory() {
+            @Override
+            public Client create(ReapalConfig ignored) {
+                return client;
+            }
+        };
+        ReapalRechargeService rechargeService = new ReapalRechargeService(
+                strategyRegistry(), orderStore, configService, clientFactory);
+        RecordingRechargeCallback callback = new RecordingRechargeCallback();
+
+        new ReapalRechargePollingService(orderStore, rechargeService, callback)
+                .pollDueOrders();
+
+        assertNull(orderStore.getByPayoutOrderNo("PAYOUT-100"));
+        assertNull(callback.successResult);
+        assertTrue(client.requests.isEmpty());
+    }
+
+    @Test
+    void shouldKeepPollingOrderWhileRechargeIsProcessing() {
+        FakeClient client = new FakeClient(rechargeQuery("processing"));
+        InMemoryReapalRechargeOrderStore orderStore =
+                new InMemoryReapalRechargeOrderStore();
+        orderStore.add(new RechargePollingOrder(
+                "RC-100", "PAYOUT-100", 0L, Long.MAX_VALUE, 10_000L));
+        RecordingRechargeCallback callback = new RecordingRechargeCallback();
+
+        new ReapalRechargePollingService(
+                orderStore, rechargeService(client, orderStore), callback)
+                .pollDueOrders();
+
+        assertNotNull(orderStore.getByPayoutOrderNo("PAYOUT-100"));
+        assertNull(callback.successResult);
+        assertEquals(1, client.requests.size());
+    }
+
+    @Test
+    void shouldKeepPollingOrderWhenRechargeQueryFails() {
+        FakeClient client = new FakeClient(new ApiException("query timeout"));
+        InMemoryReapalRechargeOrderStore orderStore =
+                new InMemoryReapalRechargeOrderStore();
+        orderStore.add(new RechargePollingOrder(
+                "RC-100", "PAYOUT-100", 0L, Long.MAX_VALUE, 10_000L));
+        RecordingRechargeCallback callback = new RecordingRechargeCallback();
+
+        new ReapalRechargePollingService(
+                orderStore, rechargeService(client, orderStore), callback)
+                .pollDueOrders();
+
+        assertNotNull(orderStore.getByPayoutOrderNo("PAYOUT-100"));
+        assertNull(callback.successResult);
+        assertEquals(1, client.requests.size());
+    }
+
+    @Test
+    void shouldRemoveSuccessfulRechargeEvenWhenCallbackFails() {
+        FakeClient client = new FakeClient(rechargeQuery("completed"));
+        InMemoryReapalRechargeOrderStore orderStore =
+                new InMemoryReapalRechargeOrderStore();
+        orderStore.add(new RechargePollingOrder(
+                "RC-100", "PAYOUT-100", 0L, Long.MAX_VALUE, 10_000L));
+
+        new ReapalRechargePollingService(
+                orderStore, rechargeService(client, orderStore),
+                result -> {
+                    throw new IllegalStateException("callback failed");
+                })
+                .pollDueOrders();
+
+        assertNull(orderStore.getByPayoutOrderNo("PAYOUT-100"));
+        assertEquals(1, client.requests.size());
     }
 
     @Test
@@ -270,15 +530,32 @@ class ReapalWithdrawTradeTest {
         return createTrade(client, RechargeMode.B2B_DIRECT, "0105");
     }
 
+    private static ReapalRechargeService rechargeService(
+            FakeClient client, InMemoryReapalRechargeOrderStore orderStore) {
+        ReapalConfig config = validConfig(RechargeMode.CASHIER, null);
+        PlatformConfigService configService = mock(PlatformConfigService.class);
+        when(configService.get(PlatformConstant.REAPAL)).thenReturn(config);
+        ReapalClientFactory clientFactory = new ReapalClientFactory() {
+            @Override
+            public Client create(ReapalConfig ignored) {
+                return client;
+            }
+        };
+        return new ReapalRechargeService(
+                strategyRegistry(), orderStore, configService, clientFactory);
+    }
+
     private static ReapalWithdrawTrade createTrade(FakeClient client, RechargeMode rechargeMode,
                                                     String rechargeBankNo) {
         PlatformConfigService platformConfigService = mock(PlatformConfigService.class);
         ReapalConfig config = validConfig(rechargeMode, rechargeBankNo);
         when(platformConfigService.get(PlatformConstant.REAPAL)).thenReturn(config);
+        ReapalClientFactory clientFactory = new ReapalClientFactory();
         ReapalRechargeService rechargeService = new ReapalRechargeService(
-                strategyRegistry(), new InMemoryReapalRechargeOrderStore());
+                strategyRegistry(), new InMemoryReapalRechargeOrderStore(),
+                platformConfigService, clientFactory);
         return new ReapalWithdrawTrade(platformConfigService, rechargeService,
-                new ReapalClientFactory()) {
+                clientFactory) {
             @Override
             protected Client buildClient(ReapalConfig ignored) {
                 return client;
@@ -423,6 +700,17 @@ class ReapalWithdrawTradeTest {
                 throw exception;
             }
             return (T) result;
+        }
+    }
+
+    private static final class RecordingRechargeCallback
+            implements ReapalRechargeCallback {
+
+        private ReapalRechargeQueryResult successResult;
+
+        @Override
+        public void successRecharge(ReapalRechargeQueryResult result) {
+            successResult = result;
         }
     }
 }

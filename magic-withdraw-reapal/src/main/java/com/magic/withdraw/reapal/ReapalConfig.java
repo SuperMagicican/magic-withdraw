@@ -28,7 +28,7 @@ public class ReapalConfig
     private String encryptId;
     private String reapalPublicKey;
 
-    /** 充值交互模式，默认企业网银直连 */
+    /** 充值交互模式，默认融宝收银台 */
     private RechargeMode rechargeMode = RechargeMode.CASHIER;
 
     /** 企业网银直连时使用的充值银行编码 */

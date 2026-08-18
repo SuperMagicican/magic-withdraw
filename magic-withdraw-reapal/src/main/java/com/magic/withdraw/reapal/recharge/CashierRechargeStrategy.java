@@ -3,7 +3,6 @@ package com.magic.withdraw.reapal.recharge;
 import com.magic.withdraw.reapal.ReapalConfig;
 import com.magic.withdraw.reapal.ReapalConfig.RechargeMode;
 
-import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -12,6 +11,7 @@ import java.util.Map;
 public class CashierRechargeStrategy implements ReapalRechargeStrategy {
 
     private static final String PRODUCT_CODE = "CASHIER";
+    private static final Map<String, Object> EXPEND = Map.of("pyeeAcctType", "20");
 
     @Override
     public RechargeMode mode() {
@@ -25,6 +25,6 @@ public class CashierRechargeStrategy implements ReapalRechargeStrategy {
 
     @Override
     public Map<String, Object> buildExpend(ReapalConfig config) {
-        return Collections.emptyMap();
+        return EXPEND;
     }
 }

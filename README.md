@@ -122,8 +122,8 @@ String paymentUrl = reapalData.getPaymentUrl();
 
 充值模式支持：
 
-- `B2B_DIRECT`：指定 `rechargeBankNo`，直接进入对应企业网银；这是默认模式。
-- `CASHIER`：进入融宝收银台后选择付款方式，不需要传 `rechargeBankNo`。
+- `B2B_DIRECT`：指定 `rechargeBankNo`，直接进入对应企业网银。
+- `CASHIER`：进入融宝收银台后选择付款方式，不需要传 `rechargeBankNo`；这是默认模式。
 
 `SingleWithdrawRequest` 中仅 `rechargeOrderNo` 是融宝专用的逐笔参数；充值模式、付款银行、会员信息和返回地址统一配置在 `ReapalConfig`。
 
@@ -138,8 +138,29 @@ reapalConfig.setRechargeMode(ReapalConfig.RechargeMode.CASHIER)
 
 融宝订单在充值状态为 `wait` 或 `processing` 时进入充值主动巡检队列。组件按
 `rechargeQueryInterval` 间隔查询充值订单，最长查询 `rechargeQueryTimeout` 秒；查询到
-`completed` 后将关联代付订单加入代付巡检。充值为 `failed`、`closed` 或查询超时后停止巡检。
-默认使用内存队列，生产环境可提供 `ReapalRechargeOrderStore` Bean 替换为持久化实现。
+`completed` 后默认将关联代付订单加入代付巡检；充值为 `failed`、`closed`
+等其他终态时只移除充值巡检任务，不触发提现失败回调；查询超时同样只移除任务。
+同一代付订单只要在充值巡检存储中已有任务，就不允许再次发起充值。默认使用内存队列，
+生产环境可提供 `ReapalRechargeOrderStore` Bean 替换为 Redis、数据库等持久化实现。
+
+`ReapalRechargeService` 也可以脱离组合代付流程，独立发起和查询关联充值：
+
+```java
+ReapalRechargeResponse submitResponse = reapalRechargeService.submit(
+        new ReapalRechargeRequest()
+                .setRechargeOrderNo("RECHARGE-20260811001")
+                .setPayoutOrderNo("PAYOUT-20260811001")
+                .setPayoutOutOrderNo("融宝代付orderId")
+                .setAmount(10000L)
+                .setOrderTitle("订单代付充值"));
+
+ReapalRechargeQueryResult queryResult = reapalRechargeService.query(
+        "RECHARGE-20260811001");
+```
+
+业务方需要替换充值成功处理时，可提供 `ReapalRechargeCallback` Bean，实现
+`successRecharge`。没有自定义实现时，充值成功会默认进入代付巡检。手动调用 `query`
+只返回查询结果，不触发回调；由内存或外部巡检存储驱动的查询在充值成功时才会触发回调。
 
 ## 回调与巡检配置
 
