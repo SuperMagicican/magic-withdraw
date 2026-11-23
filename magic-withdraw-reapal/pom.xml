@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.magic</groupId>
         <artifactId>magic-withdraw</artifactId>
-        <version>1.1.5</version>
+        <version>1.1.6</version>
     </parent>
 
     <artifactId>magic-withdraw-reapal</artifactId>
@@ -31,7 +31,7 @@
         <dependency>
             <groupId>com.reapal.sdk</groupId>
             <artifactId>reapal-sdk-java</artifactId>
-            <version>4.3.156</version>
+            <version>4.3.162</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.bouncycastle</groupId>
